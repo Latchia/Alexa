@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shanmathi's Pill Tracker</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: #f0f2f5;
+      color: #1a1a2e;
+      min-height: 100vh;
+    }
+
+    header {
+      background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+      padding: 20px 0;
+      text-align: center;
+      color: #fff;
+      box-shadow: 0 2px 12px rgba(108,92,231,0.3);
+    }
+
+    header h1 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+
+    header p {
+      font-size: 0.8rem;
+      opacity: 0.85;
+      margin-top: 4px;
+    }
+
+    .container {
+      max-width: 680px;
+      margin: 24px auto;
+      padding: 0 16px;
+    }
+
+    .week-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .week-nav button {
+      background: #6c5ce7;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 16px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .week-nav button:hover { background: #5a4bd1; }
+
+    .week-nav span {
+      font-weight: 600;
+      font-size: 0.95rem;
+      color: #444;
+    }
+
+    .day-card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 14px 18px;
+      margin-bottom: 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+      transition: box-shadow 0.2s;
+    }
+
+    .day-card:hover { box-shadow: 0 3px 12px rgba(0,0,0,0.1); }
+
+    .day-card.today {
+      border-left: 4px solid #6c5ce7;
+    }
+
+    .day-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .day-name {
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+
+    .day-date {
+      font-size: 0.75rem;
+      color: #888;
+    }
+
+    .day-complete {
+      font-size: 0.7rem;
+      background: #00b894;
+      color: #fff;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-weight: 600;
+    }
+
+    .slots {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .slot-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      padding: 10px 6px;
+      border-radius: 10px;
+      border: 2px solid #e0e0e0;
+      background: #fafafa;
+      cursor: pointer;
+      transition: all 0.2s;
+      user-select: none;
+    }
+
+    .slot-btn:hover {
+      border-color: #6c5ce7;
+      background: #f3f0ff;
+    }
+
+    .slot-btn.taken {
+      background: #dfe6e9;
+      border-color: #00b894;
+    }
+
+    .slot-btn .icon {
+      font-size: 1.3rem;
+    }
+
+    .slot-btn .label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #555;
+    }
+
+    .slot-btn .status {
+      font-size: 0.65rem;
+      color: #aaa;
+    }
+
+    .slot-btn.taken .status {
+      color: #00b894;
+      font-weight: 600;
+    }
+
+    .legend {
+      text-align: center;
+      margin-top: 16px;
+      font-size: 0.75rem;
+      color: #999;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: #2d3436;
+      color: #fff;
+      padding: 10px 24px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      opacity: 0;
+      transition: all 0.3s ease;
+      z-index: 100;
+      pointer-events: none;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    @media (max-width: 480px) {
+      header h1 { font-size: 1.2rem; }
+      .slots { gap: 6px; }
+      .slot-btn { padding: 8px 4px; }
+      .slot-btn .icon { font-size: 1.1rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>💊 Shanmathi's Pill Tracker</h1>
+    <p>Stay consistent, stay healthy</p>
+    <span id="modeTag" style="display:inline-block;margin-top:6px;font-size:0.7rem;background:rgba(255,255,255,0.2);padding:2px 10px;border-radius:10px;cursor:help">💾 Local</span>
+  </header>
+
+  <div class="container">
+    <div class="week-nav">
+      <button id="prevWeek">← Prev</button>
+      <span id="weekLabel">This Week</span>
+      <button id="nextWeek">Next →</button>
+    </div>
+    <div id="daysList"></div>
+    <div class="legend">Click a slot to toggle pill status</div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const SLOT_ICONS = { morning: '🌅', afternoon: '☀️', night: '🌙' };
+    const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const LS_KEY = 'shanmathi_pill_data';
+
+    let pillData = {};
+    let weekOffset = 0;
+    let useServer = false; // auto-detected
+
+    // ---- Storage: localStorage fallback + server sync ----
+    function loadLocal() {
+      try {
+        const raw = localStorage.getItem(LS_KEY);
+        if (raw) pillData = JSON.parse(raw);
+      } catch { /* empty */ }
+    }
+
+    function saveLocal() {
+      try { localStorage.setItem(LS_KEY, JSON.stringify(pillData)); } catch { /* full */ }
+    }
+
+    async function fetchPills() {
+      try {
+        const res = await fetch('/api/pills');
+        if (res.ok) {
+          pillData = await res.json();
+          useServer = true;
+          saveLocal(); // mirror to localStorage
+        }
+      } catch {
+        loadLocal();
+        useServer = false;
+      }
+      render();
+    }
+
+    async function toggleSlot(date, slot) {
+      if (!pillData[date]) pillData[date] = { morning: false, afternoon: false, night: false };
+
+      if (useServer) {
+        try {
+          const res = await fetch('/api/pills/toggle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date, slot })
+          });
+          const result = await res.json();
+          pillData[date][slot] = result.taken;
+          saveLocal();
+          showToast(`${slot} pill ${result.taken ? 'taken ✓' : 'unmarked'}`);
+        } catch {
+          pillData[date][slot] = !pillData[date][slot];
+          saveLocal();
+          showToast(`${slot} pill toggled (offline)`);
+        }
+      } else {
+        pillData[date][slot] = !pillData[date][slot];
+        saveLocal();
+        showToast(`${slot} pill ${pillData[date][slot] ? 'taken ✓' : 'unmarked'}`);
+      }
+      render();
+    }
+
+    // ---- Rendering ----
+    function getWeekDates(offset) {
+      const today = new Date();
+      const start = new Date(today);
+      start.setDate(today.getDate() - today.getDay() + offset * 7);
+      const dates = [];
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(start);
+        d.setDate(start.getDate() + i);
+        dates.push(d);
+      }
+      return dates;
+    }
+
+    function dateKey(d) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+
+    function isToday(d) {
+      const t = new Date();
+      return d.getFullYear() === t.getFullYear() && d.getMonth() === t.getMonth() && d.getDate() === t.getDate();
+    }
+
+    function render() {
+      const dates = getWeekDates(weekOffset);
+      const startDate = dates[0];
+      const endDate = dates[6];
+      document.getElementById('weekLabel').textContent =
+        `${MONTH_NAMES[startDate.getMonth()]} ${startDate.getDate()} – ${MONTH_NAMES[endDate.getMonth()]} ${endDate.getDate()}, ${endDate.getFullYear()}`;
+
+      const modeTag = document.getElementById('modeTag');
+      modeTag.textContent = useServer ? '🟢 Online' : '💾 Local';
+      modeTag.title = useServer ? 'Synced with server – Alexa can update this' : 'Saving to this browser only';
+
+      const container = document.getElementById('daysList');
+      container.innerHTML = '';
+
+      dates.forEach(d => {
+        const key = dateKey(d);
+        const dayData = pillData[key] || { morning: false, afternoon: false, night: false };
+        const allDone = dayData.morning && dayData.afternoon && dayData.night;
+        const today = isToday(d);
+
+        const card = document.createElement('div');
+        card.className = 'day-card' + (today ? ' today' : '');
+
+        card.innerHTML = `
+          <div class="day-header">
+            <div>
+              <span class="day-name">${DAY_NAMES[d.getDay()]}${today ? ' (Today)' : ''}</span>
+              <span class="day-date">${MONTH_NAMES[d.getMonth()]} ${d.getDate()}</span>
+            </div>
+            ${allDone ? '<span class="day-complete">All Done ✓</span>' : ''}
+          </div>
+          <div class="slots">
+            ${['morning', 'afternoon', 'night'].map(slot => `
+              <div class="slot-btn ${dayData[slot] ? 'taken' : ''}" onclick="toggleSlot('${key}','${slot}')">
+                <span class="icon">${SLOT_ICONS[slot]}</span>
+                <span class="label">${slot}</span>
+                <span class="status">${dayData[slot] ? 'Taken ✓' : 'Pending'}</span>
+              </div>
+            `).join('')}
+          </div>
+        `;
+
+        container.appendChild(card);
+      });
+    }
+
+    // ---- Toast ----
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 1800);
+    }
+
+    // ---- Navigation ----
+    document.getElementById('prevWeek').addEventListener('click', () => { weekOffset--; render(); });
+    document.getElementById('nextWeek').addEventListener('click', () => { weekOffset++; render(); });
+
+    // ---- Auto-refresh every 10s (picks up Alexa/Bixby updates when online) ----
+    setInterval(fetchPills, 10000);
+
+    // ---- Init ----
+    loadLocal();
+    render();
+    fetchPills();
+  </script>
+</body>
+</html>
