@@ -221,51 +221,6 @@
     }
     .hint { font-size: 0.75rem !important; color: #999 !important; }
 
-    /* Reminder Settings */
-    .reminder-section {
-      margin-top: 16px; background: #fff; border-radius: 12px;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.06); overflow: hidden;
-    }
-    .reminder-section summary {
-      padding: 14px 18px; cursor: pointer; font-weight: 600;
-      font-size: 0.9rem; color: #444; list-style: none; user-select: none;
-    }
-    .reminder-section summary::-webkit-details-marker { display: none; }
-    .reminder-section summary::before { content: '▶ '; font-size: 0.7rem; }
-    .reminder-section[open] summary::before { content: '▼ '; }
-    .reminder-body { padding: 0 18px 18px; }
-    .notif-status {
-      display: flex; align-items: center; gap: 8px;
-      padding: 10px 12px; border-radius: 8px; margin-bottom: 14px; font-size: 0.8rem;
-    }
-    .notif-status.enabled { background: #f0faf6; color: #00b894; }
-    .notif-status.disabled { background: #fff5f5; color: #e17055; }
-    .notif-status.unknown { background: #f8f8f8; color: #888; }
-    .notif-btn {
-      padding: 7px 16px; border: none; border-radius: 8px;
-      font-size: 0.8rem; font-weight: 600; cursor: pointer; margin-bottom: 14px;
-    }
-    .notif-btn.enable { background: #00b894; color: #fff; }
-    .notif-btn.disable { background: #ff7675; color: #fff; }
-    .notif-btn.test { background: #6c5ce7; color: #fff; margin-left: 6px; }
-    .reminder-slot {
-      display: flex; align-items: center; gap: 10px;
-      padding: 8px 0; border-bottom: 1px solid #f0f0f0;
-    }
-    .reminder-slot:last-child { border-bottom: none; }
-    .reminder-slot .rs-label { font-size: 0.85rem; font-weight: 600; color: #2d3436; min-width: 90px; }
-    .reminder-slot input[type="time"] {
-      border: 1px solid #ddd; border-radius: 6px; padding: 5px 8px;
-      font-size: 0.8rem; outline: none; flex: 1; max-width: 130px;
-    }
-    .reminder-slot input[type="time"]:focus { border-color: #6c5ce7; }
-    .reminder-slot .rs-clear {
-      background: none; border: none; color: #b2bec3; cursor: pointer;
-      font-size: 0.8rem; padding: 4px 8px;
-    }
-    .reminder-slot .rs-clear:hover { color: #e17055; }
-    .reminder-autosave { text-align: center; font-size: 0.72rem; color: #00b894; padding: 8px 0 2px; }
-
     /* Toast */
     .toast {
       position: fixed; bottom: 24px; left: 50%;
@@ -334,16 +289,6 @@
     <details class="settings-section" id="settingsPanel">
       <summary>⚙️ Manage Medicine List</summary>
       <div class="settings-body" id="settingsBody"></div>
-    </details>
-
-    <!-- Reminder Notifications -->
-    <details class="reminder-section" id="reminderPanel">
-      <summary>🔔 Pill Reminders</summary>
-      <div class="reminder-body">
-        <div class="notif-status unknown" id="notifStatus">Checking notification status...</div>
-        <div id="notifActions"></div>
-        <div id="reminderTimes"></div>
-      </div>
     </details>
 
     <!-- Report -->
@@ -459,8 +404,7 @@ async function switchProfile(id) {
   const profile = profiles.find(p => p.id === id);
   document.getElementById('tapProfileName').textContent = profile ? profile.name : id;
   updateTapUrl();
-  await loadReminders();
-  render(); renderSettings(); renderReport(); renderReminders();
+  render(); renderSettings(); renderReport();
 }
 
 function updateTapUrl() {
@@ -732,160 +676,9 @@ document.getElementById('todayBtn').addEventListener('click', () => { dayOffset=
 document.getElementById('prevMonth').addEventListener('click', () => { reportMonthOffset--; renderReport(); });
 document.getElementById('nextMonth').addEventListener('click', () => { reportMonthOffset++; renderReport(); });
 
-// ---- Push Notifications ----
-let swRegistration = null;
-let pushSubscription = null;
-let vapidPublicKey = null;
-let reminderTimes = { morning: '', afternoon: '', night: '' };
-
-async function initServiceWorker() {
-  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
-  try {
-    swRegistration = await navigator.serviceWorker.register('/sw.js');
-    pushSubscription = await swRegistration.pushManager.getSubscription();
-    // Fetch VAPID key
-    const res = await fetch('/api/vapidPublicKey');
-    if (res.ok) { const d = await res.json(); vapidPublicKey = d.publicKey; }
-  } catch {}
-}
-
-function urlBase64ToUint8Array(base64String) {
-  const padding = '='.repeat((4 - base64String.length % 4) % 4);
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-  const rawData = atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-  for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
-  return outputArray;
-}
-
-async function enableNotifications() {
-  if (!swRegistration || !vapidPublicKey) { showToast('Push not supported here'); return; }
-  try {
-    const permission = await Notification.requestPermission();
-    if (permission !== 'granted') { showToast('Permission denied'); renderReminders(); return; }
-
-    pushSubscription = await swRegistration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(vapidPublicKey)
-    });
-
-    if (useServer && currentProfileId) {
-      await fetch(`/api/push/subscribe/${currentProfileId}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subscription: pushSubscription.toJSON() })
-      });
-    }
-    showToast('Notifications enabled ✓');
-    renderReminders();
-  } catch (err) { showToast('Failed to enable: ' + err.message); }
-}
-
-async function disableNotifications() {
-  if (pushSubscription) {
-    const endpoint = pushSubscription.endpoint;
-    await pushSubscription.unsubscribe();
-    pushSubscription = null;
-    if (useServer && currentProfileId) {
-      await fetch(`/api/push/unsubscribe/${currentProfileId}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ endpoint })
-      }).catch(() => {});
-    }
-    showToast('Notifications disabled');
-  }
-  renderReminders();
-}
-
-async function testNotification() {
-  if (!useServer || !currentProfileId) return;
-  try {
-    const res = await fetch(`/api/push/test/${currentProfileId}`, { method: 'POST' });
-    const d = await res.json();
-    showToast(res.ok ? 'Test sent!' : d.error);
-  } catch { showToast('Failed to send test'); }
-}
-
-async function loadReminders() {
-  if (!useServer || !currentProfileId) return;
-  try {
-    const res = await fetch(`/api/reminders/${currentProfileId}`);
-    if (res.ok) reminderTimes = await res.json();
-  } catch {}
-}
-
-async function saveReminderTime(slot) {
-  const input = document.getElementById(`reminder-${slot}`);
-  reminderTimes[slot] = input ? input.value : '';
-  if (useServer && currentProfileId) {
-    try {
-      await fetch(`/api/reminders/${currentProfileId}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(reminderTimes)
-      });
-    } catch {}
-  }
-  showToast(`${slot.charAt(0).toUpperCase()+slot.slice(1)} reminder ${reminderTimes[slot] ? 'set to ' + reminderTimes[slot] : 'cleared'}`);
-}
-
-function clearReminderTime(slot) {
-  const input = document.getElementById(`reminder-${slot}`);
-  if (input) input.value = '';
-  reminderTimes[slot] = '';
-  saveReminderTime(slot);
-}
-
-function renderReminders() {
-  const hasSW = 'serviceWorker' in navigator && 'PushManager' in window;
-  const permState = hasSW ? Notification.permission : 'unsupported';
-  const isSubscribed = !!pushSubscription;
-
-  // Status
-  const statusEl = document.getElementById('notifStatus');
-  if (!hasSW) {
-    statusEl.className = 'notif-status disabled';
-    statusEl.textContent = '⚠️ Push notifications not supported in this browser';
-  } else if (permState === 'denied') {
-    statusEl.className = 'notif-status disabled';
-    statusEl.textContent = '🚫 Notifications blocked — enable in browser settings';
-  } else if (isSubscribed) {
-    statusEl.className = 'notif-status enabled';
-    statusEl.textContent = '🔔 Notifications are ON — you\'ll get reminders at set times';
-  } else {
-    statusEl.className = 'notif-status unknown';
-    statusEl.textContent = '🔕 Notifications are OFF — enable to get pill reminders';
-  }
-
-  // Buttons
-  const actionsEl = document.getElementById('notifActions');
-  if (!hasSW || permState === 'denied') {
-    actionsEl.innerHTML = '';
-  } else if (isSubscribed) {
-    actionsEl.innerHTML = `
-      <button class="notif-btn test" onclick="testNotification()">🔔 Test</button>
-      <button class="notif-btn disable" onclick="disableNotifications()">Disable</button>`;
-  } else {
-    actionsEl.innerHTML = `<button class="notif-btn enable" onclick="enableNotifications()">🔔 Enable Notifications</button>`;
-  }
-
-  // Reminder times
-  const timesEl = document.getElementById('reminderTimes');
-  if (!isSubscribed) {
-    timesEl.innerHTML = '<div style="font-size:0.78rem;color:#999;padding:8px 0">Enable notifications to set reminder times</div>';
-    return;
-  }
-  timesEl.innerHTML = SLOTS.map(slot => `
-    <div class="reminder-slot">
-      <span class="rs-label">${SLOT_ICONS[slot]} ${slot.charAt(0).toUpperCase()+slot.slice(1)}</span>
-      <input type="time" id="reminder-${slot}" value="${reminderTimes[slot] || ''}" onchange="saveReminderTime('${slot}')">
-      <button class="rs-clear" onclick="clearReminderTime('${slot}')" title="Clear">✕</button>
-    </div>
-  `).join('') + '<div class="reminder-autosave">Changes saved automatically to server</div>';
-}
-
 // ---- Init ----
 (async function init() {
   await fetchProfiles();
-  await initServiceWorker();
   const saved = loadSavedProfile();
   if (saved && profiles.find(p => p.id === saved)) {
     await switchProfile(saved);
