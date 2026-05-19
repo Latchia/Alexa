@@ -6,111 +6,87 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3456;
 const DATA_FILE = path.join(__dirname, 'data.json');
+const CONFIG_FILE = path.join(__dirname, 'config.json');
 
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Helper: load data
-function loadData() {
-  if (fs.existsSync(DATA_FILE)) {
-    return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+// ---- File helpers ----
+function loadJSON(file, fallback) {
+  if (fs.existsSync(file)) return JSON.parse(fs.readFileSync(file, 'utf8'));
+  return fallback;
+}
+function saveJSON(file, data) {
+  fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf8');
+}
+
+function loadData() { return loadJSON(DATA_FILE, {}); }
+function saveData(d) { saveJSON(DATA_FILE, d); }
+function loadConfig() {
+  return loadJSON(CONFIG_FILE, {
+    morning: ['Tablet A', 'Tablet B'],
+    afternoon: ['Tablet C'],
+    night: ['Tablet D', 'Tablet E']
+  });
+}
+function saveConfigFile(c) { saveJSON(CONFIG_FILE, c); }
+
+function todayKey() { return new Date().toISOString().slice(0, 10); }
+const VALID_SLOTS = ['morning', 'afternoon', 'night'];
+
+// ---- GET /api/pills ----
+app.get('/api/pills', (req, res) => res.json(loadData()));
+
+// ---- GET /api/config ----
+app.get('/api/config', (req, res) => res.json(loadConfig()));
+
+// ---- POST /api/config — save medicine list ----
+app.post('/api/config', (req, res) => {
+  const cfg = req.body;
+  if (!cfg || typeof cfg !== 'object') return res.status(400).json({ error: 'Invalid config' });
+  // Validate structure
+  for (const slot of VALID_SLOTS) {
+    if (cfg[slot] && !Array.isArray(cfg[slot])) return res.status(400).json({ error: `${slot} must be an array` });
   }
-  return {};
-}
-
-// Helper: save data
-function saveData(data) {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf8');
-}
-
-// Helper: today's date string
-function todayKey() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-// GET /api/pills — return all pill data
-app.get('/api/pills', (req, res) => {
-  res.json(loadData());
+  saveConfigFile(cfg);
+  res.json({ message: 'Config saved', config: cfg });
 });
 
-// POST /api/pills/toggle — toggle a specific slot
-// Body: { "date": "2026-04-28", "slot": "morning" }
-app.post('/api/pills/toggle', (req, res) => {
-  const { date, slot } = req.body;
-  if (!date || !slot) {
-    return res.status(400).json({ error: 'date and slot are required' });
-  }
-  const validSlots = ['morning', 'afternoon', 'night'];
-  if (!validSlots.includes(slot)) {
-    return res.status(400).json({ error: 'slot must be morning, afternoon, or night' });
-  }
-  // Validate date format
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    return res.status(400).json({ error: 'date must be YYYY-MM-DD' });
-  }
+// ---- POST /api/pills/toggleMed — toggle individual medicine ----
+app.post('/api/pills/toggleMed', (req, res) => {
+  const { date, slot, med, taken } = req.body;
+  if (!date || !slot || !med) return res.status(400).json({ error: 'date, slot, and med are required' });
+  if (!VALID_SLOTS.includes(slot)) return res.status(400).json({ error: 'Invalid slot' });
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: 'date must be YYYY-MM-DD' });
 
   const data = loadData();
-  if (!data[date]) {
-    data[date] = { morning: false, afternoon: false, night: false };
-  }
-  data[date][slot] = !data[date][slot];
+  if (!data[date]) data[date] = {};
+  if (!data[date][slot]) data[date][slot] = {};
+  data[date][slot][med] = typeof taken === 'boolean' ? taken : !data[date][slot][med];
   saveData(data);
-  res.json({ date, slot, taken: data[date][slot] });
+  res.json({ date, slot, med, taken: data[date][slot][med] });
 });
 
-// POST /api/pills/mark — mark a slot as taken (for Alexa / Bixby)
-// Body: { "date": "2026-04-28", "slot": "morning" }  (date is optional, defaults to today)
-app.post('/api/pills/mark', (req, res) => {
+// ---- POST /api/pills/markSlot — mark ALL medicines in a slot as taken ----
+app.post('/api/pills/markSlot', (req, res) => {
   let { date, slot } = req.body;
   date = date || todayKey();
-  if (!slot) {
-    return res.status(400).json({ error: 'slot is required (morning, afternoon, or night)' });
-  }
-  const validSlots = ['morning', 'afternoon', 'night'];
-  if (!validSlots.includes(slot)) {
-    return res.status(400).json({ error: 'slot must be morning, afternoon, or night' });
-  }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    return res.status(400).json({ error: 'date must be YYYY-MM-DD' });
-  }
+  if (!slot) return res.status(400).json({ error: 'slot is required' });
+  if (!VALID_SLOTS.includes(slot)) return res.status(400).json({ error: 'Invalid slot' });
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: 'date must be YYYY-MM-DD' });
 
+  const config = loadConfig();
+  const meds = config[slot] || [];
   const data = loadData();
-  if (!data[date]) {
-    data[date] = { morning: false, afternoon: false, night: false };
-  }
-  data[date][slot] = true;
+  if (!data[date]) data[date] = {};
+  if (!data[date][slot]) data[date][slot] = {};
+  meds.forEach(med => { data[date][slot][med] = true; });
   saveData(data);
-  res.json({ message: `Marked ${slot} pill as taken for ${date}`, date, slot, taken: true });
+  res.json({ message: `All ${slot} medicines marked as taken`, date, slot, meds });
 });
 
-// POST /api/pills/unmark — mark a slot as NOT taken
-app.post('/api/pills/unmark', (req, res) => {
-  let { date, slot } = req.body;
-  date = date || todayKey();
-  if (!slot) {
-    return res.status(400).json({ error: 'slot is required (morning, afternoon, or night)' });
-  }
-  const validSlots = ['morning', 'afternoon', 'night'];
-  if (!validSlots.includes(slot)) {
-    return res.status(400).json({ error: 'slot must be morning, afternoon, or night' });
-  }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    return res.status(400).json({ error: 'date must be YYYY-MM-DD' });
-  }
-
-  const data = loadData();
-  if (!data[date]) {
-    data[date] = { morning: false, afternoon: false, night: false };
-  }
-  data[date][slot] = false;
-  saveData(data);
-  res.json({ message: `Unmarked ${slot} pill for ${date}`, date, slot, taken: false });
-});
-
-// ---- SmartTag2 tap endpoints (GET-based, opens in phone browser) ----
-
-// Auto-detect slot based on time of day
+// ---- SmartTag2 tap endpoints ----
 function autoSlot() {
   const hour = new Date().getHours();
   if (hour >= 5 && hour < 12) return 'morning';
@@ -118,19 +94,21 @@ function autoSlot() {
   return 'night';
 }
 
-// Shared handler for tap endpoints
 function handleTap(slot, res) {
   const date = todayKey();
+  const config = loadConfig();
+  const meds = config[slot] || [];
   const data = loadData();
-  if (!data[date]) {
-    data[date] = { morning: false, afternoon: false, night: false };
-  }
-  const alreadyTaken = data[date][slot];
-  data[date][slot] = true;
+  if (!data[date]) data[date] = {};
+  if (!data[date][slot]) data[date][slot] = {};
+
+  const alreadyAll = meds.every(m => data[date][slot][m]);
+  meds.forEach(med => { data[date][slot][med] = true; });
   saveData(data);
 
   const slotIcon = { morning: '🌅', afternoon: '☀️', night: '🌙' }[slot];
-  const status = alreadyTaken ? 'Already marked' : 'Marked as taken';
+  const status = alreadyAll ? 'Already marked' : 'All marked as taken';
+  const medList = meds.map(m => `<li style="padding:3px 0;font-size:0.85rem">✓ ${m}</li>`).join('');
 
   res.send(`<!DOCTYPE html>
 <html lang="en">
@@ -139,17 +117,18 @@ function handleTap(slot, res) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Pill Marked!</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f0f2f5; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
-    .card { background: #fff; border-radius: 20px; padding: 40px 32px; text-align: center; box-shadow: 0 4px 24px rgba(0,0,0,0.08); max-width: 340px; width: 90vw; }
-    .icon { font-size: 3rem; margin-bottom: 12px; }
-    .check { font-size: 4rem; color: #00b894; margin-bottom: 8px; }
-    h1 { font-size: 1.2rem; color: #2d3436; margin-bottom: 4px; }
-    p { font-size: 0.85rem; color: #888; margin-bottom: 20px; }
-    .slot { display: inline-block; background: #6c5ce7; color: #fff; padding: 4px 16px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; text-transform: uppercase; margin-bottom: 16px; }
-    .note { font-size: 0.75rem; color: #b2bec3; }
-    a { color: #6c5ce7; text-decoration: none; font-weight: 600; font-size: 0.85rem; }
-    a:hover { text-decoration: underline; }
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f2f5;display:flex;align-items:center;justify-content:center;min-height:100vh}
+    .card{background:#fff;border-radius:20px;padding:36px 28px;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,0.08);max-width:340px;width:90vw}
+    .check{font-size:3.5rem;color:#00b894;margin-bottom:6px}
+    .icon{font-size:2.5rem;margin-bottom:8px}
+    .slot{display:inline-block;background:#6c5ce7;color:#fff;padding:4px 16px;border-radius:20px;font-size:0.85rem;font-weight:600;text-transform:uppercase;margin-bottom:12px}
+    h1{font-size:1.1rem;color:#2d3436;margin-bottom:4px}
+    p{font-size:0.8rem;color:#888;margin-bottom:14px}
+    ul{list-style:none;text-align:left;padding:0 10px;color:#2d3436;margin-bottom:14px}
+    .note{font-size:0.72rem;color:#b2bec3}
+    a{color:#6c5ce7;text-decoration:none;font-weight:600;font-size:0.85rem}
+    a:hover{text-decoration:underline}
   </style>
 </head>
 <body>
@@ -159,17 +138,15 @@ function handleTap(slot, res) {
     <div class="slot">${slot}</div>
     <h1>${status}</h1>
     <p>${date}</p>
+    <ul>${medList || '<li>No medicines configured</li>'}</ul>
     <a href="/">Open Full Tracker →</a>
-    <div class="note" style="margin-top:16px">You can close this tab now</div>
+    <div class="note" style="margin-top:14px">You can close this tab now</div>
   </div>
 </body>
 </html>`);
 }
 
-// GET /tap/auto — auto-detect morning/afternoon/night based on current time
 app.get('/tap/auto', (req, res) => handleTap(autoSlot(), res));
-
-// GET /tap/morning, /tap/afternoon, /tap/night — mark a specific slot
 app.get('/tap/morning', (req, res) => handleTap('morning', res));
 app.get('/tap/afternoon', (req, res) => handleTap('afternoon', res));
 app.get('/tap/night', (req, res) => handleTap('night', res));
