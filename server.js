@@ -2,10 +2,16 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+const webpush = require('web-push');
 
 const app = express();
 const PORT = process.env.PORT || 3456;
 const DB_FILE = path.join(__dirname, 'db.json');
+
+// ---- VAPID keys for Web Push ----
+const VAPID_PUBLIC = process.env.VAPID_PUBLIC || 'BB9lMFn4a4Mj0nCWDVTxMnmSqhFew60XfbXDeZIePMqGq_eQMlpdzFrej5Xq8icNXGbDzWZNjYQMHXUnGD7Wgbg';
+const VAPID_PRIVATE = process.env.VAPID_PRIVATE || 'vkaInSOPkjKv2Xh_sHltvldVUU9bVuEyUtSuoTTwSqI';
+webpush.setVapidDetails('mailto:pilltracker@example.com', VAPID_PUBLIC, VAPID_PRIVATE);
 
 app.use(cors());
 app.use(express.json());
@@ -13,8 +19,9 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // ---- DB structure ----
 // {
-//   profiles: { "id": { name: "Shanmathi", config: { morning: [...], afternoon: [...], night: [...] } } },
-//   pills: { "id": { "2026-05-20": { morning: { "TabletA": true }, ... } } }
+//   profiles: { "id": { name, config: { morning: [...] }, reminders: { morning: "08:00", ... } } },
+//   pills: { "id": { "2026-05-20": { morning: { "TabletA": true }, ... } } },
+//   subscriptions: { "id": [ { endpoint, keys } ] }
 // }
 function loadDB() {
   if (fs.existsSync(DB_FILE)) return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
@@ -190,6 +197,161 @@ app.get('/tap/:profileId/morning', (req, res) => handleTap(req.params.profileId,
 app.get('/tap/:profileId/afternoon', (req, res) => handleTap(req.params.profileId, 'afternoon', res));
 app.get('/tap/:profileId/night', (req, res) => handleTap(req.params.profileId, 'night', res));
 
+// ---- Push Notification Endpoints ----
+
+// GET /api/vapidPublicKey
+app.get('/api/vapidPublicKey', (req, res) => {
+  res.json({ publicKey: VAPID_PUBLIC });
+});
+
+// POST /api/push/subscribe/:profileId — save push subscription
+app.post('/api/push/subscribe/:profileId', (req, res) => {
+  const { subscription } = req.body;
+  const pid = req.params.profileId;
+  if (!subscription || !subscription.endpoint) {
+    return res.status(400).json({ error: 'Invalid subscription' });
+  }
+  const db = loadDB();
+  if (!db.profiles[pid]) return res.status(404).json({ error: 'Profile not found' });
+  if (!db.subscriptions) db.subscriptions = {};
+  if (!db.subscriptions[pid]) db.subscriptions[pid] = [];
+  // Avoid duplicates by endpoint
+  const exists = db.subscriptions[pid].some(s => s.endpoint === subscription.endpoint);
+  if (!exists) db.subscriptions[pid].push(subscription);
+  saveDB(db);
+  res.json({ message: 'Subscribed' });
+});
+
+// POST /api/push/unsubscribe/:profileId — remove push subscription
+app.post('/api/push/unsubscribe/:profileId', (req, res) => {
+  const { endpoint } = req.body;
+  const pid = req.params.profileId;
+  const db = loadDB();
+  if (db.subscriptions && db.subscriptions[pid]) {
+    db.subscriptions[pid] = db.subscriptions[pid].filter(s => s.endpoint !== endpoint);
+    saveDB(db);
+  }
+  res.json({ message: 'Unsubscribed' });
+});
+
+// GET /api/reminders/:profileId — get reminder times
+app.get('/api/reminders/:profileId', (req, res) => {
+  const db = loadDB();
+  const profile = db.profiles[req.params.profileId];
+  if (!profile) return res.status(404).json({ error: 'Profile not found' });
+  res.json(profile.reminders || { morning: '', afternoon: '', night: '' });
+});
+
+// POST /api/reminders/:profileId — save reminder times
+app.post('/api/reminders/:profileId', (req, res) => {
+  const reminders = req.body;
+  const pid = req.params.profileId;
+  if (!reminders || typeof reminders !== 'object') return res.status(400).json({ error: 'Invalid' });
+  // Validate time format
+  for (const slot of VALID_SLOTS) {
+    if (reminders[slot] && !/^\d{2}:\d{2}$/.test(reminders[slot])) {
+      return res.status(400).json({ error: `${slot} must be HH:MM format` });
+    }
+  }
+  const db = loadDB();
+  if (!db.profiles[pid]) return res.status(404).json({ error: 'Profile not found' });
+  db.profiles[pid].reminders = reminders;
+  saveDB(db);
+  res.json({ message: 'Reminders saved', reminders });
+});
+
+// POST /api/push/test/:profileId — send a test notification
+app.post('/api/push/test/:profileId', (req, res) => {
+  const pid = req.params.profileId;
+  const db = loadDB();
+  const profile = db.profiles[pid];
+  if (!profile) return res.status(404).json({ error: 'Profile not found' });
+  const subs = (db.subscriptions && db.subscriptions[pid]) || [];
+  if (subs.length === 0) return res.status(400).json({ error: 'No subscriptions found. Enable notifications first.' });
+
+  const payload = JSON.stringify({
+    title: `💊 Test — ${profile.name}`,
+    body: 'Notifications are working! You\'ll get reminders at your set times.',
+    slot: 'test'
+  });
+
+  const results = subs.map(sub =>
+    webpush.sendNotification(sub, payload).catch(err => {
+      // Remove invalid subscriptions (410 Gone, 404)
+      if (err.statusCode === 410 || err.statusCode === 404) {
+        db.subscriptions[pid] = db.subscriptions[pid].filter(s => s.endpoint !== sub.endpoint);
+        saveDB(db);
+      }
+      return null;
+    })
+  );
+  Promise.all(results).then(() => res.json({ message: 'Test notification sent', count: subs.length }));
+});
+
+// ---- Push Notification Scheduler ----
+// Checks every 30 seconds if any profile's reminder time matches the current HH:MM
+const sentReminders = new Map(); // key: "profileId-slot-date" to avoid duplicate sends
+
+function checkAndSendReminders() {
+  const now = new Date();
+  const currentTime = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  const today = todayKey();
+
+  const db = loadDB();
+  if (!db.subscriptions) return;
+
+  for (const [pid, profile] of Object.entries(db.profiles)) {
+    if (!profile.reminders) continue;
+    const subs = db.subscriptions[pid];
+    if (!subs || subs.length === 0) continue;
+
+    for (const slot of VALID_SLOTS) {
+      const reminderTime = profile.reminders[slot];
+      if (!reminderTime || reminderTime !== currentTime) continue;
+
+      const key = `${pid}-${slot}-${today}`;
+      if (sentReminders.has(key)) continue;
+
+      // Check if pills already taken
+      const pillsToday = (db.pills[pid] && db.pills[pid][today] && db.pills[pid][today][slot]) || {};
+      const meds = profile.config[slot] || [];
+      const allTaken = meds.length > 0 && meds.every(m => pillsToday[m]);
+      if (allTaken) { sentReminders.set(key, true); continue; }
+
+      const slotIcon = { morning: '🌅', afternoon: '☀️', night: '🌙' }[slot];
+      const medList = meds.filter(m => !pillsToday[m]).join(', ') || 'your medicines';
+      const payload = JSON.stringify({
+        title: `${slotIcon} ${slot.charAt(0).toUpperCase() + slot.slice(1)} Pills — ${profile.name}`,
+        body: `Time to take: ${medList}`,
+        slot
+      });
+
+      sentReminders.set(key, true);
+
+      let dbChanged = false;
+      for (const sub of subs) {
+        webpush.sendNotification(sub, payload).catch(err => {
+          if (err.statusCode === 410 || err.statusCode === 404) {
+            const freshDB = loadDB();
+            if (freshDB.subscriptions && freshDB.subscriptions[pid]) {
+              freshDB.subscriptions[pid] = freshDB.subscriptions[pid].filter(s => s.endpoint !== sub.endpoint);
+              saveDB(freshDB);
+            }
+          }
+        });
+      }
+    }
+  }
+
+  // Clean old entries from sentReminders (keep only today's)
+  for (const [key] of sentReminders) {
+    if (!key.endsWith(today)) sentReminders.delete(key);
+  }
+}
+
+setInterval(checkAndSendReminders, 30000);
+
 app.listen(PORT, () => {
   console.log(`Mr.Pill-Tracker™ running at http://localhost:${PORT}`);
+  console.log('Push notification scheduler active (checking every 30s)');
 });
