@@ -359,7 +359,8 @@ async function fetchPills() {
     const res = await fetch('/api/config');
     if (res.ok) {
       const cfg = await res.json();
-      if (cfg && cfg.morning) { medConfig = cfg; saveConfig(); }
+      const settingsOpen = document.getElementById('settingsPanel').open;
+      if (cfg && cfg.morning && !settingsOpen) { medConfig = cfg; saveConfig(); }
     }
   } catch {}
   render();
@@ -474,9 +475,7 @@ function renderSettings() {
       </div>
     </div>
   `).join('') + `
-    <div class="config-save-row">
-      <button class="btn-save" onclick="saveSettings()">💾 Save Medicine List</button>
-    </div>
+    <div class="config-save-row" style="font-size:0.72rem;color:#00b894;padding:6px 0">Changes are saved automatically</div>
   `;
 }
 
@@ -488,15 +487,17 @@ function addMed(slot) {
   if (medConfig[slot].includes(name)) { showToast('Already added'); return; }
   medConfig[slot].push(name);
   input.value = '';
+  persistConfig();
   renderSettings();
 }
 
 function removeMed(slot, index) {
   medConfig[slot].splice(index, 1);
+  persistConfig();
   renderSettings();
 }
 
-async function saveSettings() {
+async function persistConfig() {
   saveConfig();
   if (useServer) {
     try {
@@ -509,7 +510,6 @@ async function saveSettings() {
   }
   render();
   renderReport();
-  showToast('Medicine list saved ✓');
 }
 
 // ---- Monthly Report ----
