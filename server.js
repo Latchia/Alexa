@@ -62,7 +62,10 @@ app.post('/api/pills/toggleMed', (req, res) => {
 
   const data = loadData();
   if (!data[date]) data[date] = {};
-  if (!data[date][slot]) data[date][slot] = {};
+  // Migrate old boolean format to object format
+  if (typeof data[date][slot] !== 'object' || data[date][slot] === null) {
+    data[date][slot] = {};
+  }
   data[date][slot][med] = typeof taken === 'boolean' ? taken : !data[date][slot][med];
   saveData(data);
   res.json({ date, slot, med, taken: data[date][slot][med] });
@@ -80,7 +83,9 @@ app.post('/api/pills/markSlot', (req, res) => {
   const meds = config[slot] || [];
   const data = loadData();
   if (!data[date]) data[date] = {};
-  if (!data[date][slot]) data[date][slot] = {};
+  if (typeof data[date][slot] !== 'object' || data[date][slot] === null) {
+    data[date][slot] = {};
+  }
   meds.forEach(med => { data[date][slot][med] = true; });
   saveData(data);
   res.json({ message: `All ${slot} medicines marked as taken`, date, slot, meds });
@@ -100,7 +105,9 @@ function handleTap(slot, res) {
   const meds = config[slot] || [];
   const data = loadData();
   if (!data[date]) data[date] = {};
-  if (!data[date][slot]) data[date][slot] = {};
+  if (typeof data[date][slot] !== 'object' || data[date][slot] === null) {
+    data[date][slot] = {};
+  }
 
   const alreadyAll = meds.every(m => data[date][slot][m]);
   meds.forEach(med => { data[date][slot][med] = true; });

@@ -1,7 +1,15 @@
 {
   "2026-05-20": {
-    "morning": true,
-    "afternoon": false,
-    "night": false
+    "morning": {
+      "Tablet A": false,
+      "Tablet B": true
+    },
+    "afternoon": {
+      "Tablet C": true
+    },
+    "night": {
+      "Tablet D": true,
+      "Tablet E": true
+    }
   }
 }
