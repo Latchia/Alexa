@@ -191,5 +191,5 @@ app.get('/tap/:profileId/afternoon', (req, res) => handleTap(req.params.profileI
 app.get('/tap/:profileId/night', (req, res) => handleTap(req.params.profileId, 'night', res));
 
 app.listen(PORT, () => {
-  console.log(`"Howdy" Mr.Pill-Tracker running at http://localhost:${PORT}`);
+  console.log(`Mr.Pill-Tracker™ running at http://localhost:${PORT}`);
 });
