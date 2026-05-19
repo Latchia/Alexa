@@ -1,7 +1,7 @@
 {
   "2026-05-20": {
     "morning": {
-      "Tablet A": false,
+      "Tablet A": true,
       "Tablet B": true
     },
     "afternoon": {

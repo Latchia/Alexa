@@ -3,35 +3,83 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Shanmathi's Pill Tracker</title>
+  <title>"Howdy" Mr.Pill-Tracker</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-      background: #f0f2f5;
-      color: #1a1a2e;
-      min-height: 100vh;
-      padding-bottom: 40px;
-    }
+    body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #f0f2f5; color: #1a1a2e; min-height: 100vh; padding-bottom: 40px; }
+
     header {
       background: linear-gradient(135deg, #6c5ce7, #a29bfe);
-      padding: 18px 0 14px;
-      text-align: center;
-      color: #fff;
+      padding: 16px 0 12px; text-align: center; color: #fff;
       box-shadow: 0 2px 12px rgba(108,92,231,0.3);
       position: sticky; top: 0; z-index: 50;
     }
-    header h1 { font-size: 1.35rem; font-weight: 600; }
-    header p { font-size: 0.75rem; opacity: 0.85; margin-top: 2px; }
-    #modeTag {
-      display: inline-block; margin-top: 5px; font-size: 0.65rem;
-      background: rgba(255,255,255,0.2); padding: 2px 10px;
-      border-radius: 10px; cursor: help;
+    header h1 { font-size: 1.3rem; font-weight: 600; }
+    header .subtitle { font-size: 0.7rem; opacity: 0.8; margin-top: 2px; }
+
+    /* Profile bar */
+    .profile-bar {
+      display: flex; align-items: center; justify-content: center;
+      gap: 8px; margin-top: 8px; flex-wrap: wrap;
     }
+    .profile-bar select {
+      padding: 4px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.4);
+      background: rgba(255,255,255,0.2); color: #fff; font-size: 0.8rem;
+      font-weight: 600; cursor: pointer; outline: none; min-width: 140px;
+    }
+    .profile-bar select option { color: #2d3436; background: #fff; }
+    .profile-bar .pbtn {
+      padding: 4px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.4);
+      background: rgba(255,255,255,0.15); color: #fff; font-size: 0.7rem;
+      cursor: pointer; font-weight: 600;
+    }
+    .profile-bar .pbtn:hover { background: rgba(255,255,255,0.3); }
+    .profile-bar .pbtn.danger { border-color: #ff7675; color: #ff7675; }
+    #modeTag {
+      display: inline-block; margin-top: 5px; font-size: 0.6rem;
+      background: rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 10px;
+    }
+
+    /* Create profile modal */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+      z-index: 100; align-items: center; justify-content: center;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal {
+      background: #fff; border-radius: 16px; padding: 28px 24px;
+      width: 90vw; max-width: 360px; box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+    }
+    .modal h3 { font-size: 1rem; margin-bottom: 14px; color: #2d3436; }
+    .modal input {
+      width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 8px;
+      font-size: 0.85rem; outline: none; margin-bottom: 14px;
+    }
+    .modal input:focus { border-color: #6c5ce7; }
+    .modal .modal-btns { display: flex; gap: 8px; justify-content: flex-end; }
+    .modal .modal-btns button {
+      padding: 7px 18px; border: none; border-radius: 8px;
+      font-size: 0.8rem; font-weight: 600; cursor: pointer;
+    }
+    .modal .btn-cancel { background: #f0f0f0; color: #666; }
+    .modal .btn-create { background: #6c5ce7; color: #fff; }
 
     .container { max-width: 520px; margin: 0 auto; padding: 16px 14px 0; }
 
-    /* ---- Day Navigation ---- */
+    /* No profile state */
+    .no-profile {
+      text-align: center; padding: 60px 20px; background: #fff;
+      border-radius: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+    .no-profile .icon { font-size: 3rem; margin-bottom: 10px; }
+    .no-profile h2 { font-size: 1.1rem; color: #2d3436; margin-bottom: 6px; }
+    .no-profile p { font-size: 0.82rem; color: #888; margin-bottom: 16px; }
+    .no-profile button {
+      background: #6c5ce7; color: #fff; border: none; border-radius: 10px;
+      padding: 10px 24px; font-size: 0.9rem; font-weight: 600; cursor: pointer;
+    }
+
+    /* Day Nav */
     .day-nav {
       display: flex; align-items: center; justify-content: space-between;
       background: #fff; border-radius: 12px; padding: 10px 14px;
@@ -39,7 +87,7 @@
     }
     .day-nav button {
       background: #6c5ce7; color: #fff; border: none; border-radius: 8px;
-      padding: 7px 14px; font-size: 0.8rem; cursor: pointer; transition: background 0.2s;
+      padding: 7px 14px; font-size: 0.8rem; cursor: pointer;
     }
     .day-nav button:hover { background: #5a4bd1; }
     .day-nav .day-info { text-align: center; }
@@ -51,7 +99,7 @@
       color: #fff; border: none; cursor: pointer;
     }
 
-    /* ---- Slot Card ---- */
+    /* Slot Card */
     .slot-card {
       background: #fff; border-radius: 14px; padding: 16px 18px;
       margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06);
@@ -60,12 +108,8 @@
       display: flex; align-items: center; justify-content: space-between;
       margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #f0f0f0;
     }
-    .slot-card-header .slot-title {
-      font-weight: 700; font-size: 0.95rem; display: flex; align-items: center; gap: 6px;
-    }
-    .slot-card-header .slot-badge {
-      font-size: 0.65rem; padding: 2px 8px; border-radius: 10px; font-weight: 600;
-    }
+    .slot-card-header .slot-title { font-weight: 700; font-size: 0.95rem; }
+    .slot-badge { font-size: 0.65rem; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
     .slot-badge.done { background: #00b894; color: #fff; }
     .slot-badge.partial { background: #ffeaa7; color: #6c5ce7; }
     .slot-badge.pending { background: #f0f0f0; color: #999; }
@@ -78,31 +122,19 @@
     }
     .med-item:hover { background: #f3f0ff; }
     .med-item.taken { background: #f0faf6; }
-    .med-item input[type="checkbox"] {
-      width: 18px; height: 18px; accent-color: #00b894; cursor: pointer; flex-shrink: 0;
-    }
-    .med-item .med-name {
-      font-size: 0.85rem; color: #2d3436; flex: 1;
-    }
-    .med-item.taken .med-name {
-      text-decoration: line-through; color: #b2bec3;
-    }
-    .med-item .med-status {
-      font-size: 0.65rem; color: #b2bec3;
-    }
+    .med-item input[type="checkbox"] { width: 18px; height: 18px; accent-color: #00b894; cursor: pointer; flex-shrink: 0; }
+    .med-item .med-name { font-size: 0.85rem; color: #2d3436; flex: 1; }
+    .med-item.taken .med-name { text-decoration: line-through; color: #b2bec3; }
+    .med-item .med-status { font-size: 0.65rem; color: #b2bec3; }
     .med-item.taken .med-status { color: #00b894; font-weight: 600; }
-
-    .slot-card .no-meds {
-      text-align: center; padding: 12px; color: #b2bec3; font-size: 0.8rem;
-    }
+    .slot-card .no-meds { text-align: center; padding: 12px; color: #b2bec3; font-size: 0.8rem; }
 
     .all-done-banner {
       text-align: center; background: #00b894; color: #fff;
-      padding: 10px; border-radius: 10px; font-weight: 600;
-      font-size: 0.9rem; margin-bottom: 14px;
+      padding: 10px; border-radius: 10px; font-weight: 600; font-size: 0.9rem; margin-bottom: 14px;
     }
 
-    /* ---- Settings ---- */
+    /* Settings */
     .settings-section {
       margin-top: 20px; background: #fff; border-radius: 12px;
       box-shadow: 0 1px 4px rgba(0,0,0,0.06); overflow: hidden;
@@ -115,43 +147,23 @@
     .settings-section summary::before { content: '▶ '; font-size: 0.7rem; }
     .settings-section[open] summary::before { content: '▼ '; }
     .settings-body { padding: 0 18px 18px; }
-
     .config-slot { margin-bottom: 16px; }
-    .config-slot h4 {
-      font-size: 0.82rem; color: #6c5ce7; margin-bottom: 6px;
-      display: flex; align-items: center; gap: 6px;
-    }
-    .config-slot .med-input-row {
-      display: flex; gap: 6px; margin-bottom: 6px;
-    }
+    .config-slot h4 { font-size: 0.82rem; color: #6c5ce7; margin-bottom: 6px; }
+    .config-slot .med-input-row { display: flex; gap: 6px; margin-bottom: 6px; }
     .config-slot input[type="text"] {
       flex: 1; border: 1px solid #ddd; border-radius: 6px;
       padding: 6px 10px; font-size: 0.8rem; outline: none;
     }
     .config-slot input[type="text"]:focus { border-color: #6c5ce7; }
-    .btn-add {
-      border: none; border-radius: 6px; padding: 6px 10px;
-      cursor: pointer; font-size: 0.75rem; font-weight: 600;
-      background: #6c5ce7; color: #fff;
-    }
-    .btn-remove {
-      border: none; border-radius: 6px; padding: 4px 8px;
-      cursor: pointer; font-size: 0.7rem; font-weight: 600;
-      background: #ff7675; color: #fff;
-    }
+    .btn-add { border: none; border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 0.75rem; font-weight: 600; background: #6c5ce7; color: #fff; }
+    .btn-remove { border: none; border-radius: 6px; padding: 4px 8px; cursor: pointer; font-size: 0.7rem; font-weight: 600; background: #ff7675; color: #fff; }
     .config-med-list { list-style: none; }
     .config-med-item {
       display: flex; align-items: center; justify-content: space-between;
-      padding: 5px 8px; background: #f8f8f8; border-radius: 6px;
-      margin-bottom: 3px; font-size: 0.8rem;
-    }
-    .config-save-row { text-align: center; margin-top: 10px; }
-    .btn-save {
-      background: #00b894; color: #fff; border: none; border-radius: 8px;
-      padding: 8px 24px; font-size: 0.85rem; font-weight: 600; cursor: pointer;
+      padding: 5px 8px; background: #f8f8f8; border-radius: 6px; margin-bottom: 3px; font-size: 0.8rem;
     }
 
-    /* ---- Monthly Report ---- */
+    /* Report */
     .report-section {
       margin-top: 24px; background: #fff; border-radius: 12px;
       box-shadow: 0 1px 4px rgba(0,0,0,0.06); overflow: hidden;
@@ -167,45 +179,28 @@
       border-radius: 6px; padding: 5px 10px; font-size: 0.75rem; cursor: pointer;
     }
     .report-nav button:hover { background: rgba(255,255,255,0.4); }
-    .report-nav span {
-      color: #fff; font-weight: 600; font-size: 0.8rem;
-      min-width: 90px; text-align: center;
-    }
+    .report-nav span { color: #fff; font-weight: 600; font-size: 0.8rem; min-width: 90px; text-align: center; }
     .report-summary {
       display: grid; grid-template-columns: repeat(3, 1fr);
       gap: 8px; padding: 12px 18px; border-bottom: 1px solid #f0f0f0;
     }
-    .stat-card {
-      text-align: center; padding: 8px 4px; border-radius: 10px; background: #fafafa;
-    }
+    .stat-card { text-align: center; padding: 8px 4px; border-radius: 10px; background: #fafafa; }
     .stat-card .stat-val { font-size: 1.3rem; font-weight: 700; color: #2d3436; }
-    .stat-card .stat-label {
-      font-size: 0.6rem; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px;
-    }
+    .stat-card .stat-label { font-size: 0.6rem; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
     .stat-card.good .stat-val { color: #00b894; }
     .stat-card.warn .stat-val { color: #e17055; }
     .report-body { padding: 8px 18px 14px; }
-    .report-body .no-misses {
-      text-align: center; padding: 20px 0; color: #00b894; font-weight: 600; font-size: 0.85rem;
-    }
+    .report-body .no-misses { text-align: center; padding: 20px 0; color: #00b894; font-weight: 600; font-size: 0.85rem; }
     .miss-row {
-      display: flex; align-items: flex-start; gap: 8px;
-      padding: 7px 10px; border-radius: 8px; margin-bottom: 4px;
-      background: #fff5f5; border-left: 3px solid #e17055;
+      display: flex; align-items: flex-start; gap: 8px; padding: 7px 10px;
+      border-radius: 8px; margin-bottom: 4px; background: #fff5f5; border-left: 3px solid #e17055;
     }
-    .miss-row .miss-date {
-      font-weight: 600; font-size: 0.78rem; color: #2d3436; min-width: 90px;
-    }
+    .miss-row .miss-date { font-weight: 600; font-size: 0.78rem; color: #2d3436; min-width: 90px; }
     .miss-row .miss-slots { display: flex; gap: 4px; flex-wrap: wrap; }
-    .miss-row .miss-chip {
-      font-size: 0.65rem; padding: 2px 7px; border-radius: 10px;
-      background: #ffeaa7; color: #6c5ce7; font-weight: 600;
-    }
-    .report-footer {
-      text-align: center; padding: 8px 18px 14px; font-size: 0.68rem; color: #b2bec3;
-    }
+    .miss-row .miss-chip { font-size: 0.65rem; padding: 2px 7px; border-radius: 10px; background: #ffeaa7; color: #6c5ce7; font-weight: 600; }
+    .report-footer { text-align: center; padding: 8px 18px 14px; font-size: 0.68rem; color: #b2bec3; }
 
-    /* ---- SmartTag Guide ---- */
+    /* SmartTag Guide */
     .setup-guide {
       margin-top: 16px; background: #fff; border-radius: 12px;
       box-shadow: 0 1px 4px rgba(0,0,0,0.06); overflow: hidden;
@@ -221,13 +216,12 @@
     .guide-content p { font-size: 0.82rem; color: #555; margin-bottom: 8px; line-height: 1.5; }
     .url-box {
       background: #f3f0ff; border: 1px solid #d1c4e9; border-radius: 8px;
-      padding: 10px 14px; font-family: 'Consolas', monospace; font-size: 0.8rem;
+      padding: 10px 14px; font-family: 'Consolas', monospace; font-size: 0.75rem;
       color: #6c5ce7; word-break: break-all; margin: 8px 0 12px; cursor: pointer; user-select: all;
     }
     .hint { font-size: 0.75rem !important; color: #999 !important; }
-    .hint code { background: #f0f0f0; padding: 1px 5px; border-radius: 3px; font-size: 0.73rem; }
 
-    /* ---- Toast ---- */
+    /* Toast */
     .toast {
       position: fixed; bottom: 24px; left: 50%;
       transform: translateX(-50%) translateY(80px);
@@ -238,70 +232,91 @@
     .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
     @media (max-width: 480px) {
-      header h1 { font-size: 1.15rem; }
+      header h1 { font-size: 1.1rem; }
       .container { padding: 12px 10px 0; }
-      .day-nav button { padding: 6px 10px; font-size: 0.75rem; }
     }
   </style>
 </head>
 <body>
 
 <header>
-  <h1>💊 Shanmathi's Pill Tracker</h1>
-  <p>Stay consistent, stay healthy</p>
+  <h1>💊 "Howdy" Mr.Pill-Tracker</h1>
+  <div class="profile-bar" id="profileBar">
+    <select id="profileSelect" onchange="switchProfile(this.value)"></select>
+    <button class="pbtn" onclick="openCreateModal()">+ New</button>
+    <button class="pbtn danger" id="deleteBtn" onclick="deleteProfile()">🗑</button>
+  </div>
   <span id="modeTag">💾 Local</span>
 </header>
 
+<!-- Create Profile Modal -->
+<div class="modal-overlay" id="createModal">
+  <div class="modal">
+    <h3>Create New Profile</h3>
+    <input type="text" id="newProfileName" placeholder="Enter person's name..." maxlength="50" onkeydown="if(event.key==='Enter')createProfile()">
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeCreateModal()">Cancel</button>
+      <button class="btn-create" onclick="createProfile()">Create</button>
+    </div>
+  </div>
+</div>
+
 <div class="container">
-  <!-- Day Navigation -->
-  <div class="day-nav">
-    <button id="prevDay">← Prev</button>
-    <div class="day-info">
-      <div class="dn" id="dayName">Monday</div>
-      <div class="dd" id="dayDate">May 19, 2026</div>
-      <button class="today-btn" id="todayBtn" style="display:none">Go to Today</button>
-    </div>
-    <button id="nextDay">Next →</button>
+  <!-- No profile placeholder -->
+  <div class="no-profile" id="noProfile" style="display:none">
+    <div class="icon">👤</div>
+    <h2>No profiles yet</h2>
+    <p>Create a profile to start tracking medicines</p>
+    <button onclick="openCreateModal()">+ Create Profile</button>
   </div>
 
-  <!-- All Done Banner -->
-  <div class="all-done-banner" id="allDoneBanner" style="display:none">🎉 All medicines taken for today!</div>
-
-  <!-- Slot Cards -->
-  <div id="slotsContainer"></div>
-
-  <!-- Settings: Medicine List -->
-  <details class="settings-section" id="settingsPanel">
-    <summary>⚙️ Manage Medicine List</summary>
-    <div class="settings-body" id="settingsBody"></div>
-  </details>
-
-  <!-- Monthly Report -->
-  <div class="report-section">
-    <div class="report-header">
-      <h2>📋 Monthly Report</h2>
-      <div class="report-nav">
-        <button id="prevMonth">← Prev</button>
-        <span id="monthLabel">May 2026</span>
-        <button id="nextMonth">Next →</button>
+  <div id="mainContent" style="display:none">
+    <!-- Day Navigation -->
+    <div class="day-nav">
+      <button id="prevDay">← Prev</button>
+      <div class="day-info">
+        <div class="dn" id="dayName">Monday</div>
+        <div class="dd" id="dayDate">May 20, 2026</div>
+        <button class="today-btn" id="todayBtn" style="display:none">Go to Today</button>
       </div>
+      <button id="nextDay">Next →</button>
     </div>
-    <div class="report-summary" id="reportSummary"></div>
-    <div class="report-body" id="reportBody"></div>
-    <div class="report-footer" id="reportFooter"></div>
-  </div>
 
-  <!-- SmartTag Guide -->
-  <details class="setup-guide">
-    <summary>📱 SmartTag2 Setup Guide</summary>
-    <div class="guide-content">
-      <p><strong>1.</strong> Create a SmartThings Automation: SmartTag2 pressed → Send notification</p>
-      <p><strong>2.</strong> Create a Samsung Routine: Receive notification from SmartThings → Open webpage:</p>
-      <div class="url-box" id="tapUrl">https://alexa-mine.onrender.com/tap/auto</div>
-      <p class="hint">Auto-detects time: 5am–12pm → Morning | 12–5pm → Afternoon | 5pm–5am → Night</p>
-      <p class="hint">SmartTag marks <strong>all medicines</strong> in the detected slot as taken.</p>
+    <div class="all-done-banner" id="allDoneBanner" style="display:none">🎉 All medicines taken for today!</div>
+    <div id="slotsContainer"></div>
+
+    <!-- Settings -->
+    <details class="settings-section" id="settingsPanel">
+      <summary>⚙️ Manage Medicine List</summary>
+      <div class="settings-body" id="settingsBody"></div>
+    </details>
+
+    <!-- Report -->
+    <div class="report-section">
+      <div class="report-header">
+        <h2>📋 Monthly Report</h2>
+        <div class="report-nav">
+          <button id="prevMonth">← Prev</button>
+          <span id="monthLabel"></span>
+          <button id="nextMonth">Next →</button>
+        </div>
+      </div>
+      <div class="report-summary" id="reportSummary"></div>
+      <div class="report-body" id="reportBody"></div>
+      <div class="report-footer" id="reportFooter"></div>
     </div>
-  </details>
+
+    <!-- SmartTag Guide -->
+    <details class="setup-guide">
+      <summary>📱 SmartTag2 Setup Guide</summary>
+      <div class="guide-content">
+        <p>Your SmartTag URL for <strong id="tapProfileName">this profile</strong>:</p>
+        <div class="url-box" id="tapUrl"></div>
+        <p class="hint">Auto-detects time: 5am–12pm → Morning | 12–5pm → Afternoon | 5pm–5am → Night</p>
+        <p class="hint">Each person has their own SmartTag URL. Assign a different SmartTag per person!</p>
+      </div>
+    </details>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -312,103 +327,201 @@ const SLOTS = ['morning', 'afternoon', 'night'];
 const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const MONTH_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-const LS_KEY = 'shanmathi_pill_data';
-const LS_CONFIG = 'shanmathi_pill_config';
 
+let profiles = [];
+let currentProfileId = null;
 let pillData = {};
+let medConfig = { morning: [], afternoon: [], night: [] };
 let dayOffset = 0;
 let reportMonthOffset = 0;
 let useServer = false;
-let lastToggleTime = 0; // prevent auto-refresh from overwriting after toggle
-
-// Default medicine config — user will update via settings
-let medConfig = {
-  morning: ['Tablet A', 'Tablet B'],
-  afternoon: ['Tablet C'],
-  night: ['Tablet D', 'Tablet E']
-};
+let lastToggleTime = 0;
 
 // ---- Helpers ----
 function dateKey(d) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
-function getViewDate() {
-  const d = new Date(); d.setDate(d.getDate() + dayOffset); return d;
+function getViewDate() { const d = new Date(); d.setDate(d.getDate() + dayOffset); return d; }
+
+// ---- Local Storage ----
+function lsKey(k) { return `pt_${currentProfileId}_${k}`; }
+function loadLocal() { try { const r = localStorage.getItem(lsKey('pills')); if (r) pillData = JSON.parse(r); } catch {} }
+function saveLocal() { try { localStorage.setItem(lsKey('pills'), JSON.stringify(pillData)); } catch {} }
+function loadConfig() { try { const r = localStorage.getItem(lsKey('config')); if (r) medConfig = JSON.parse(r); } catch {} }
+function saveConfig() { try { localStorage.setItem(lsKey('config'), JSON.stringify(medConfig)); } catch {} }
+function loadSavedProfile() { return localStorage.getItem('pt_current_profile') || null; }
+function saveSavedProfile(id) { localStorage.setItem('pt_current_profile', id); }
+
+// ---- Profiles ----
+async function fetchProfiles() {
+  try {
+    const res = await fetch('/api/profiles');
+    if (res.ok) { profiles = await res.json(); useServer = true; }
+  } catch { useServer = false; }
+  renderProfileDropdown();
 }
 
-// ---- Storage ----
-function loadLocal() {
-  try { const r = localStorage.getItem(LS_KEY); if (r) pillData = JSON.parse(r); } catch {}
-}
-function saveLocal() {
-  try { localStorage.setItem(LS_KEY, JSON.stringify(pillData)); } catch {}
-}
-function loadConfig() {
-  try { const r = localStorage.getItem(LS_CONFIG); if (r) medConfig = JSON.parse(r); } catch {}
-}
-function saveConfig() {
-  try { localStorage.setItem(LS_CONFIG, JSON.stringify(medConfig)); } catch {}
-}
+function renderProfileDropdown() {
+  const sel = document.getElementById('profileSelect');
+  sel.innerHTML = profiles.map(p =>
+    `<option value="${p.id}" ${p.id === currentProfileId ? 'selected' : ''}>${p.name}</option>`
+  ).join('');
 
-// ---- Server sync ----
-async function fetchPills() {
-  // Skip if user just toggled something (wait 3s to avoid overwriting)
-  if (Date.now() - lastToggleTime < 3000) return;
-  try {
-    const res = await fetch('/api/pills');
-    if (res.ok) { pillData = await res.json(); useServer = true; saveLocal(); }
-  } catch { loadLocal(); useServer = false; }
-  try {
-    const res = await fetch('/api/config');
-    if (res.ok) {
-      const cfg = await res.json();
-      const settingsOpen = document.getElementById('settingsPanel').open;
-      if (cfg && cfg.morning && !settingsOpen) { medConfig = cfg; saveConfig(); }
+  if (profiles.length === 0) {
+    document.getElementById('noProfile').style.display = 'block';
+    document.getElementById('mainContent').style.display = 'none';
+    document.getElementById('deleteBtn').style.display = 'none';
+  } else {
+    document.getElementById('noProfile').style.display = 'none';
+    document.getElementById('mainContent').style.display = 'block';
+    document.getElementById('deleteBtn').style.display = '';
+    if (!currentProfileId || !profiles.find(p => p.id === currentProfileId)) {
+      switchProfile(profiles[0].id);
     }
-  } catch {}
-  render();
-  renderReport();
+  }
 }
 
+async function switchProfile(id) {
+  currentProfileId = id;
+  saveSavedProfile(id);
+  pillData = {}; medConfig = { morning: [], afternoon: [], night: [] };
+  dayOffset = 0; reportMonthOffset = 0;
+  loadConfig(); loadLocal();
+
+  // Fetch from server
+  if (useServer) {
+    try {
+      const [pillRes, cfgRes] = await Promise.all([
+        fetch(`/api/pills/${id}`),
+        fetch(`/api/config/${id}`)
+      ]);
+      if (pillRes.ok) { pillData = await pillRes.json(); saveLocal(); }
+      if (cfgRes.ok) { const c = await cfgRes.json(); if (c) { medConfig = c; saveConfig(); } }
+    } catch {}
+  }
+
+  document.getElementById('profileSelect').value = id;
+  const profile = profiles.find(p => p.id === id);
+  document.getElementById('tapProfileName').textContent = profile ? profile.name : id;
+  updateTapUrl();
+  render(); renderSettings(); renderReport();
+}
+
+function updateTapUrl() {
+  const el = document.getElementById('tapUrl');
+  if (el && currentProfileId) {
+    const base = window.location.protocol.startsWith('http') ? window.location.origin : 'https://alexa-mine.onrender.com';
+    el.textContent = `${base}/tap/${currentProfileId}/auto`;
+  }
+}
+
+function openCreateModal() {
+  document.getElementById('createModal').classList.add('show');
+  document.getElementById('newProfileName').value = '';
+  document.getElementById('newProfileName').focus();
+}
+function closeCreateModal() {
+  document.getElementById('createModal').classList.remove('show');
+}
+
+async function createProfile() {
+  const name = document.getElementById('newProfileName').value.trim();
+  if (!name) { showToast('Enter a name'); return; }
+  if (useServer) {
+    try {
+      const res = await fetch('/api/profiles', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+      });
+      if (res.status === 409) { showToast('Profile already exists'); return; }
+      if (res.ok) {
+        const p = await res.json();
+        profiles.push(p);
+        closeCreateModal();
+        renderProfileDropdown();
+        switchProfile(p.id);
+        showToast(`Profile "${name}" created ✓`);
+        return;
+      }
+    } catch {}
+  }
+  // Offline fallback
+  const id = name.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 30) || 'user';
+  if (profiles.find(p => p.id === id)) { showToast('Profile already exists'); return; }
+  profiles.push({ id, name });
+  closeCreateModal();
+  renderProfileDropdown();
+  switchProfile(id);
+  showToast(`Profile "${name}" created (offline) ✓`);
+}
+
+async function deleteProfile() {
+  if (!currentProfileId) return;
+  const profile = profiles.find(p => p.id === currentProfileId);
+  const name = profile ? profile.name : currentProfileId;
+  if (!confirm(`Delete profile "${name}" and all their data?`)) return;
+
+  if (useServer) {
+    try { await fetch(`/api/profiles/${currentProfileId}`, { method: 'DELETE' }); } catch {}
+  }
+  try { localStorage.removeItem(lsKey('pills')); localStorage.removeItem(lsKey('config')); } catch {}
+  profiles = profiles.filter(p => p.id !== currentProfileId);
+  currentProfileId = null;
+  renderProfileDropdown();
+  if (profiles.length > 0) switchProfile(profiles[0].id);
+  showToast(`Deleted "${name}"`);
+}
+
+// ---- Data ----
 function ensureDayData(key) {
   if (!pillData[key]) pillData[key] = {};
   SLOTS.forEach(slot => {
-    if (!pillData[key][slot]) pillData[key][slot] = {};
+    if (typeof pillData[key][slot] !== 'object' || pillData[key][slot] === null) pillData[key][slot] = {};
     (medConfig[slot] || []).forEach(med => {
       if (pillData[key][slot][med] === undefined) pillData[key][slot][med] = false;
     });
   });
 }
 
-// ---- Toggle a single medicine ----
 async function toggleMed(dateStr, slot, med) {
   ensureDayData(dateStr);
   const newVal = !pillData[dateStr][slot][med];
   pillData[dateStr][slot][med] = newVal;
-  saveLocal();
-  lastToggleTime = Date.now();
-  render();
-  renderReport();
+  saveLocal(); lastToggleTime = Date.now();
+  render(); renderReport();
   showToast(`${med} ${newVal ? '✓ taken' : 'unmarked'}`);
-  if (useServer) {
+  if (useServer && currentProfileId) {
     try {
-      const res = await fetch('/api/pills/toggleMed', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch(`/api/pills/${currentProfileId}/toggleMed`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ date: dateStr, slot, med, taken: newVal })
       });
-      if (res.ok) {
-        const result = await res.json();
-        pillData[dateStr][slot][med] = result.taken;
-        saveLocal();
-        render();
-      }
+      if (res.ok) { const r = await res.json(); pillData[dateStr][slot][med] = r.taken; saveLocal(); render(); }
     } catch {}
   }
 }
 
-// ---- Rendering ----
+// ---- Auto-refresh ----
+async function autoRefresh() {
+  if (!currentProfileId || !useServer || Date.now() - lastToggleTime < 3000) return;
+  try {
+    const res = await fetch(`/api/pills/${currentProfileId}`);
+    if (res.ok) { pillData = await res.json(); saveLocal(); }
+  } catch {}
+  try {
+    const res = await fetch(`/api/config/${currentProfileId}`);
+    if (res.ok) {
+      const cfg = await res.json();
+      const settingsOpen = document.getElementById('settingsPanel').open;
+      if (cfg && !settingsOpen) { medConfig = cfg; saveConfig(); }
+    }
+  } catch {}
+  render(); renderReport();
+}
+
+// ---- Render Day ----
 function render() {
+  if (!currentProfileId) return;
   const d = getViewDate();
   const key = dateKey(d);
   const isToday = dayOffset === 0;
@@ -417,50 +530,39 @@ function render() {
   document.getElementById('dayName').textContent = DAY_NAMES[d.getDay()] + (isToday ? ' (Today)' : '');
   document.getElementById('dayDate').textContent = `${MONTH_FULL[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
   document.getElementById('todayBtn').style.display = isToday ? 'none' : 'inline-block';
+  document.getElementById('modeTag').textContent = useServer ? '🟢 Online' : '💾 Local';
 
-  const modeTag = document.getElementById('modeTag');
-  modeTag.textContent = useServer ? '🟢 Online' : '💾 Local';
-
-  // Check all done
   let allDone = true, totalMeds = 0;
-  SLOTS.forEach(slot => {
-    (medConfig[slot] || []).forEach(med => {
-      totalMeds++;
-      if (!pillData[key][slot][med]) allDone = false;
-    });
-  });
+  SLOTS.forEach(slot => { (medConfig[slot]||[]).forEach(med => { totalMeds++; if (!pillData[key][slot][med]) allDone = false; }); });
   document.getElementById('allDoneBanner').style.display = (allDone && totalMeds > 0 && isToday) ? 'block' : 'none';
 
   const container = document.getElementById('slotsContainer');
   container.innerHTML = '';
-
   SLOTS.forEach(slot => {
     const meds = medConfig[slot] || [];
     if (meds.length === 0) return;
     const slotData = pillData[key][slot] || {};
     const taken = meds.filter(m => slotData[m]);
-    const badgeClass = taken.length === meds.length ? 'done' : taken.length > 0 ? 'partial' : 'pending';
-    const badgeText = taken.length === meds.length ? 'All Done' : `${taken.length}/${meds.length}`;
-
+    const bc = taken.length === meds.length ? 'done' : taken.length > 0 ? 'partial' : 'pending';
+    const bt = taken.length === meds.length ? 'All Done' : `${taken.length}/${meds.length}`;
     const card = document.createElement('div');
     card.className = 'slot-card';
     card.innerHTML = `
       <div class="slot-card-header">
-        <span class="slot-title">${SLOT_ICONS[slot]} ${slot.charAt(0).toUpperCase() + slot.slice(1)}</span>
-        <span class="slot-badge ${badgeClass}">${badgeText}</span>
+        <span class="slot-title">${SLOT_ICONS[slot]} ${slot.charAt(0).toUpperCase()+slot.slice(1)}</span>
+        <span class="slot-badge ${bc}">${bt}</span>
       </div>
       <ul class="med-list">
         ${meds.map(med => {
-          const t = slotData[med] || false;
-          const safeMed = med.replace(/'/g, "\\'");
-          return `<li class="med-item ${t ? 'taken' : ''}" onclick="toggleMed('${key}','${slot}','${safeMed}')">
-            <input type="checkbox" ${t ? 'checked' : ''} tabindex="-1">
+          const t = slotData[med]||false;
+          const sm = med.replace(/'/g,"\\'");
+          return `<li class="med-item ${t?'taken':''}" onclick="toggleMed('${key}','${slot}','${sm}')">
+            <input type="checkbox" ${t?'checked':''} tabindex="-1">
             <span class="med-name">${med}</span>
-            <span class="med-status">${t ? 'Taken' : 'Pending'}</span>
+            <span class="med-status">${t?'Taken':'Pending'}</span>
           </li>`;
         }).join('')}
-      </ul>
-    `;
+      </ul>`;
     container.appendChild(card);
   });
 }
@@ -470,13 +572,10 @@ function renderSettings() {
   const body = document.getElementById('settingsBody');
   body.innerHTML = SLOTS.map(slot => `
     <div class="config-slot">
-      <h4>${SLOT_ICONS[slot]} ${slot.charAt(0).toUpperCase() + slot.slice(1)}</h4>
-      <ul class="config-med-list" id="cfg-${slot}">
-        ${(medConfig[slot] || []).map((med, i) => `
-          <li class="config-med-item">
-            <span>${med}</span>
-            <button class="btn-remove" onclick="removeMed('${slot}', ${i})">✕</button>
-          </li>
+      <h4>${SLOT_ICONS[slot]} ${slot.charAt(0).toUpperCase()+slot.slice(1)}</h4>
+      <ul class="config-med-list">
+        ${(medConfig[slot]||[]).map((med,i) => `
+          <li class="config-med-item"><span>${med}</span><button class="btn-remove" onclick="removeMed('${slot}',${i})">✕</button></li>
         `).join('')}
       </ul>
       <div class="med-input-row">
@@ -484,9 +583,7 @@ function renderSettings() {
         <button class="btn-add" onclick="addMed('${slot}')">+ Add</button>
       </div>
     </div>
-  `).join('') + `
-    <div class="config-save-row" style="font-size:0.72rem;color:#00b894;padding:6px 0">Changes are saved automatically</div>
-  `;
+  `).join('') + '<div style="text-align:center;font-size:0.72rem;color:#00b894;padding:6px 0">Changes are saved automatically</div>';
 }
 
 function addMed(slot) {
@@ -497,102 +594,72 @@ function addMed(slot) {
   if (medConfig[slot].includes(name)) { showToast('Already added'); return; }
   medConfig[slot].push(name);
   input.value = '';
-  persistConfig();
-  renderSettings();
+  persistConfig(); renderSettings();
 }
-
-function removeMed(slot, index) {
-  medConfig[slot].splice(index, 1);
-  persistConfig();
-  renderSettings();
+function removeMed(slot, i) {
+  medConfig[slot].splice(i, 1);
+  persistConfig(); renderSettings();
 }
-
 async function persistConfig() {
   saveConfig();
-  if (useServer) {
+  if (useServer && currentProfileId) {
     try {
-      await fetch('/api/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      await fetch(`/api/config/${currentProfileId}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(medConfig)
       });
     } catch {}
   }
-  render();
-  renderReport();
+  render(); renderReport();
 }
 
 // ---- Monthly Report ----
-function getReportMonth(offset) {
-  const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + offset); return d;
-}
-function daysInMonth(y, m) { return new Date(y, m + 1, 0).getDate(); }
+function getReportMonth(off) { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth()+off); return d; }
+function daysInMonth(y,m) { return new Date(y,m+1,0).getDate(); }
 
 function renderReport() {
-  const monthDate = getReportMonth(reportMonthOffset);
-  const year = monthDate.getFullYear(), month = monthDate.getMonth();
-  const numDays = daysInMonth(year, month);
+  if (!currentProfileId) return;
+  const md = getReportMonth(reportMonthOffset);
+  const yr = md.getFullYear(), mn = md.getMonth();
+  const nd = daysInMonth(yr,mn);
   const today = new Date();
+  document.getElementById('monthLabel').textContent = `${MONTH_FULL[mn]} ${yr}`;
 
-  document.getElementById('monthLabel').textContent = `${MONTH_FULL[month]} ${year}`;
-
-  let totalSlots = 0, totalTaken = 0, totalMissed = 0;
-  const missedDays = [];
-
-  for (let day = 1; day <= numDays; day++) {
-    const d = new Date(year, month, day);
-    if (d > today) break;
+  let ts=0, tt=0, tm=0;
+  const missed = [];
+  for (let day=1; day<=nd; day++) {
+    const d = new Date(yr,mn,day);
+    if (d>today) break;
     const key = dateKey(d);
     ensureDayData(key);
-    const missedSlots = [];
-
+    const ms = [];
     SLOTS.forEach(slot => {
-      const meds = medConfig[slot] || [];
-      meds.forEach(med => {
-        totalSlots++;
-        if (pillData[key][slot][med]) totalTaken++; else totalMissed++;
-      });
-      const slotMissed = meds.filter(m => !pillData[key][slot][m]);
-      if (slotMissed.length > 0) missedSlots.push({ slot, meds: slotMissed });
+      const meds = medConfig[slot]||[];
+      meds.forEach(med => { ts++; if(pillData[key][slot][med]) tt++; else tm++; });
+      const sm = meds.filter(m => !pillData[key][slot][m]);
+      if (sm.length>0) ms.push({slot,meds:sm});
     });
-
-    if (missedSlots.length > 0) missedDays.push({ date: d, key, missedSlots });
+    if (ms.length>0) missed.push({date:d,key,missedSlots:ms});
   }
-
-  const adherence = totalSlots > 0 ? Math.round((totalTaken / totalSlots) * 100) : 0;
+  const adh = ts>0 ? Math.round((tt/ts)*100) : 0;
   document.getElementById('reportSummary').innerHTML = `
-    <div class="stat-card ${adherence >= 80 ? 'good' : 'warn'}">
-      <div class="stat-val">${adherence}%</div><div class="stat-label">Adherence</div>
-    </div>
-    <div class="stat-card good">
-      <div class="stat-val">${totalTaken}</div><div class="stat-label">Taken</div>
-    </div>
-    <div class="stat-card warn">
-      <div class="stat-val">${totalMissed}</div><div class="stat-label">Missed</div>
-    </div>
-  `;
+    <div class="stat-card ${adh>=80?'good':'warn'}"><div class="stat-val">${adh}%</div><div class="stat-label">Adherence</div></div>
+    <div class="stat-card good"><div class="stat-val">${tt}</div><div class="stat-label">Taken</div></div>
+    <div class="stat-card warn"><div class="stat-val">${tm}</div><div class="stat-label">Missed</div></div>`;
 
   const body = document.getElementById('reportBody');
-  if (missedDays.length === 0) {
-    body.innerHTML = '<div class="no-misses">🎉 No missed pills this month!</div>';
-  } else {
-    body.innerHTML = missedDays.map(m => `
-      <div class="miss-row">
+  body.innerHTML = missed.length===0
+    ? '<div class="no-misses">🎉 No missed pills this month!</div>'
+    : missed.map(m => `<div class="miss-row">
         <span class="miss-date">${DAY_NAMES[m.date.getDay()].slice(0,3)}, ${MONTH_NAMES[m.date.getMonth()]} ${m.date.getDate()}</span>
-        <div class="miss-slots">
-          ${m.missedSlots.map(s =>
-            s.meds.map(med => `<span class="miss-chip">${SLOT_ICONS[s.slot]} ${med}</span>`).join('')
-          ).join('')}
-        </div>
-      </div>
-    `).join('');
-  }
+        <div class="miss-slots">${m.missedSlots.map(s=>s.meds.map(med=>`<span class="miss-chip">${SLOT_ICONS[s.slot]} ${med}</span>`).join('')).join('')}</div>
+      </div>`).join('');
 
-  const isFuture = monthDate > today;
-  const countDays = Math.min(numDays, today.getMonth()===month && today.getFullYear()===year ? today.getDate() : numDays);
+  const isFuture = md>today;
+  const cd = Math.min(nd, today.getMonth()===mn&&today.getFullYear()===yr ? today.getDate() : nd);
   document.getElementById('reportFooter').textContent = isFuture
     ? 'No data yet for this month'
-    : `${missedDays.length} day${missedDays.length!==1?'s':''} with missed pills out of ${countDays}`;
+    : `${missed.length} day${missed.length!==1?'s':''} with missed pills out of ${cd}`;
 }
 
 // ---- Toast ----
@@ -605,26 +672,21 @@ function showToast(msg) {
 // ---- Navigation ----
 document.getElementById('prevDay').addEventListener('click', () => { dayOffset--; render(); });
 document.getElementById('nextDay').addEventListener('click', () => { dayOffset++; render(); });
-document.getElementById('todayBtn').addEventListener('click', () => { dayOffset = 0; render(); });
+document.getElementById('todayBtn').addEventListener('click', () => { dayOffset=0; render(); });
 document.getElementById('prevMonth').addEventListener('click', () => { reportMonthOffset--; renderReport(); });
 document.getElementById('nextMonth').addEventListener('click', () => { reportMonthOffset++; renderReport(); });
 
-// ---- Auto-refresh ----
-setInterval(fetchPills, 10000);
-
 // ---- Init ----
-loadConfig();
-loadLocal();
-render();
-renderSettings();
-renderReport();
-fetchPills();
-
-// Auto-fill SmartTag URL
-const tapUrlEl = document.getElementById('tapUrl');
-if (tapUrlEl && window.location.protocol.startsWith('http')) {
-  tapUrlEl.textContent = window.location.origin + '/tap/auto';
-}
+(async function init() {
+  await fetchProfiles();
+  const saved = loadSavedProfile();
+  if (saved && profiles.find(p => p.id === saved)) {
+    await switchProfile(saved);
+  } else if (profiles.length > 0) {
+    await switchProfile(profiles[0].id);
+  }
+  setInterval(autoRefresh, 10000);
+})();
 </script>
 </body>
 </html>
