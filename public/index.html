@@ -319,6 +319,7 @@ let pillData = {};
 let dayOffset = 0;
 let reportMonthOffset = 0;
 let useServer = false;
+let lastToggleTime = 0; // prevent auto-refresh from overwriting after toggle
 
 // Default medicine config — user will update via settings
 let medConfig = {
@@ -351,6 +352,8 @@ function saveConfig() {
 
 // ---- Server sync ----
 async function fetchPills() {
+  // Skip if user just toggled something (wait 3s to avoid overwriting)
+  if (Date.now() - lastToggleTime < 3000) return;
   try {
     const res = await fetch('/api/pills');
     if (res.ok) { pillData = await res.json(); useServer = true; saveLocal(); }
@@ -383,18 +386,25 @@ async function toggleMed(dateStr, slot, med) {
   const newVal = !pillData[dateStr][slot][med];
   pillData[dateStr][slot][med] = newVal;
   saveLocal();
+  lastToggleTime = Date.now();
+  render();
+  renderReport();
+  showToast(`${med} ${newVal ? '✓ taken' : 'unmarked'}`);
   if (useServer) {
     try {
-      await fetch('/api/pills/toggleMed', {
+      const res = await fetch('/api/pills/toggleMed', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ date: dateStr, slot, med, taken: newVal })
       });
+      if (res.ok) {
+        const result = await res.json();
+        pillData[dateStr][slot][med] = result.taken;
+        saveLocal();
+        render();
+      }
     } catch {}
   }
-  showToast(`${med} ${newVal ? '✓ taken' : 'unmarked'}`);
-  render();
-  renderReport();
 }
 
 // ---- Rendering ----
