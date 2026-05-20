@@ -351,6 +351,8 @@ function loadConfig() { try { const r = localStorage.getItem(lsKey('config')); i
 function saveConfig() { try { localStorage.setItem(lsKey('config'), JSON.stringify(medConfig)); } catch {} }
 function loadSavedProfile() { return localStorage.getItem('pt_current_profile') || null; }
 function saveSavedProfile(id) { localStorage.setItem('pt_current_profile', id); }
+function saveProfilesList() { try { localStorage.setItem('pt_profiles', JSON.stringify(profiles)); } catch {} }
+function loadProfilesList() { try { const r = localStorage.getItem('pt_profiles'); return r ? JSON.parse(r) : []; } catch { return []; } }
 
 // ---- Profiles ----
 async function fetchProfiles() {
@@ -358,6 +360,26 @@ async function fetchProfiles() {
     const res = await fetch('/api/profiles');
     if (res.ok) { profiles = await res.json(); useServer = true; }
   } catch { useServer = false; }
+
+  // If server has no profiles but localStorage does, restore them
+  if (useServer && profiles.length === 0) {
+    const localProfiles = loadProfilesList();
+    if (localProfiles.length > 0) {
+      for (const p of localProfiles) {
+        try {
+          const res = await fetch('/api/profiles', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: p.name })
+          });
+          if (res.ok) profiles.push(await res.json());
+        } catch {}
+      }
+      if (profiles.length > 0) showToast('Profiles restored from local data ✓');
+    }
+  }
+
+  // Always save server profiles to local
+  if (profiles.length > 0) saveProfilesList();
   renderProfileDropdown();
 }
 
@@ -388,6 +410,11 @@ async function switchProfile(id) {
   dayOffset = 0; reportMonthOffset = 0;
   loadConfig(); loadLocal();
 
+  // Keep local copies to detect if server was reset
+  const localPills = Object.keys(pillData).length > 0 ? JSON.parse(JSON.stringify(pillData)) : null;
+  const localConfig = (medConfig.morning.length || medConfig.afternoon.length || medConfig.night.length)
+    ? JSON.parse(JSON.stringify(medConfig)) : null;
+
   // Fetch from server
   if (useServer) {
     try {
@@ -395,8 +422,46 @@ async function switchProfile(id) {
         fetch(`/api/pills/${id}`),
         fetch(`/api/config/${id}`)
       ]);
-      if (pillRes.ok) { pillData = await pillRes.json(); saveLocal(); }
-      if (cfgRes.ok) { const c = await cfgRes.json(); if (c) { medConfig = c; saveConfig(); } }
+      let serverPills = {}, serverConfig = null;
+      if (pillRes.ok) serverPills = await pillRes.json();
+      if (cfgRes.ok) serverConfig = await cfgRes.json();
+
+      const serverHasPills = Object.keys(serverPills).length > 0;
+      const serverHasConfig = serverConfig && (serverConfig.morning?.length || serverConfig.afternoon?.length || serverConfig.night?.length);
+
+      // If server is empty but local has data, push local → server
+      if (!serverHasConfig && localConfig) {
+        try {
+          await fetch(`/api/config/${id}`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(localConfig)
+          });
+          medConfig = localConfig;
+        } catch {}
+      } else if (serverConfig) {
+        medConfig = serverConfig; saveConfig();
+      }
+
+      if (!serverHasPills && localPills) {
+        // Restore pill data to server by toggling each med
+        for (const [date, slots] of Object.entries(localPills)) {
+          for (const [slot, meds] of Object.entries(slots)) {
+            for (const [med, taken] of Object.entries(meds)) {
+              if (taken) {
+                try {
+                  await fetch(`/api/pills/${id}/toggleMed`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ date, slot, med, taken: true })
+                  });
+                } catch {}
+              }
+            }
+          }
+        }
+        pillData = localPills;
+      } else if (serverHasPills) {
+        pillData = serverPills; saveLocal();
+      }
     } catch {}
   }
 
@@ -437,6 +502,7 @@ async function createProfile() {
       if (res.ok) {
         const p = await res.json();
         profiles.push(p);
+        saveProfilesList();
         closeCreateModal();
         renderProfileDropdown();
         switchProfile(p.id);
@@ -449,6 +515,7 @@ async function createProfile() {
   const id = name.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 30) || 'user';
   if (profiles.find(p => p.id === id)) { showToast('Profile already exists'); return; }
   profiles.push({ id, name });
+  saveProfilesList();
   closeCreateModal();
   renderProfileDropdown();
   switchProfile(id);
@@ -466,6 +533,7 @@ async function deleteProfile() {
   }
   try { localStorage.removeItem(lsKey('pills')); localStorage.removeItem(lsKey('config')); } catch {}
   profiles = profiles.filter(p => p.id !== currentProfileId);
+  saveProfilesList();
   currentProfileId = null;
   renderProfileDropdown();
   if (profiles.length > 0) switchProfile(profiles[0].id);
