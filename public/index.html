@@ -221,6 +221,46 @@
     }
     .hint { font-size: 0.75rem !important; color: #999 !important; }
 
+    /* Family Overview */
+    .family-overview {
+      background: #fff; border-radius: 14px; padding: 16px 18px;
+      margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+    .family-overview h3 {
+      font-size: 0.9rem; font-weight: 700; color: #2d3436; margin-bottom: 10px;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .family-member {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 10px; border-radius: 10px; margin-bottom: 6px;
+      background: #fafafa; cursor: pointer; transition: background 0.15s;
+    }
+    .family-member:hover { background: #f3f0ff; }
+    .family-member.current { background: #f3f0ff; border: 1px solid #d1c4e9; }
+    .family-member .fm-avatar {
+      width: 34px; height: 34px; border-radius: 50%; display: flex;
+      align-items: center; justify-content: center;
+      font-weight: 700; font-size: 0.85rem; color: #fff; flex-shrink: 0;
+    }
+    .family-member .fm-info { flex: 1; }
+    .family-member .fm-name { font-size: 0.82rem; font-weight: 600; color: #2d3436; }
+    .family-member .fm-slots {
+      display: flex; gap: 4px; margin-top: 3px;
+    }
+    .family-member .fm-slot-chip {
+      font-size: 0.6rem; padding: 1px 6px; border-radius: 8px; font-weight: 600;
+    }
+    .fm-slot-chip.done { background: #00b894; color: #fff; }
+    .fm-slot-chip.partial { background: #ffeaa7; color: #6c5ce7; }
+    .fm-slot-chip.pending { background: #f0f0f0; color: #999; }
+    .fm-slot-chip.empty { background: #f8f8f8; color: #ccc; }
+    .family-member .fm-pct {
+      font-size: 0.75rem; font-weight: 700; min-width: 36px; text-align: right;
+    }
+    .fm-pct.good { color: #00b894; }
+    .fm-pct.warn { color: #e17055; }
+    .fm-pct.neutral { color: #b2bec3; }
+
     /* Toast */
     .toast {
       position: fixed; bottom: 24px; left: 50%;
@@ -280,6 +320,12 @@
         <button class="today-btn" id="todayBtn" style="display:none">Go to Today</button>
       </div>
       <button id="nextDay">Next →</button>
+    </div>
+
+    <!-- Family Overview -->
+    <div class="family-overview" id="familyOverview" style="display:none">
+      <h3>👨‍👩‍👧‍👦 Family Overview — Today</h3>
+      <div id="familyMembers"></div>
     </div>
 
     <div class="all-done-banner" id="allDoneBanner" style="display:none">🎉 All medicines taken for today!</div>
@@ -481,7 +527,7 @@ async function switchProfile(id) {
   const profile = profiles.find(p => p.id === id);
   document.getElementById('tapProfileName').textContent = profile ? profile.name : id;
   updateTapUrl();
-  render(); renderSettings(); renderReport();
+  render(); renderSettings(); renderReport(); renderFamilyOverview();
 }
 
 function updateTapUrl() {
@@ -568,7 +614,7 @@ async function toggleMed(dateStr, slot, med) {
   const newVal = !pillData[dateStr][slot][med];
   pillData[dateStr][slot][med] = newVal;
   saveLocal(); lastToggleTime = Date.now();
-  render(); renderReport();
+  render(); renderReport(); renderFamilyOverview();
   showToast(`${med} ${newVal ? '✓ taken' : 'unmarked'}`);
   if (useServer && currentProfileId) {
     try {
@@ -626,7 +672,7 @@ async function autoRefresh() {
       if (cfg && !settingsOpen) { medConfig = cfg; saveConfig(); }
     }
   } catch {}
-  render(); renderReport();
+  render(); renderReport(); renderFamilyOverview();
 }
 
 // ---- Render Day ----
@@ -720,7 +766,7 @@ async function persistConfig() {
       });
     } catch {}
   }
-  render(); renderReport();
+  render(); renderReport(); renderFamilyOverview();
 }
 
 // ---- Monthly Report ----
@@ -785,6 +831,42 @@ document.getElementById('nextDay').addEventListener('click', () => { dayOffset++
 document.getElementById('todayBtn').addEventListener('click', () => { dayOffset=0; render(); });
 document.getElementById('prevMonth').addEventListener('click', () => { reportMonthOffset--; renderReport(); });
 document.getElementById('nextMonth').addEventListener('click', () => { reportMonthOffset++; renderReport(); });
+
+// ---- Family Overview ----
+const AVATAR_COLORS = ['#6c5ce7','#00b894','#e17055','#0984e3','#fdcb6e','#e84393','#00cec9','#d63031'];
+async function renderFamilyOverview() {
+  const container = document.getElementById('familyMembers');
+  const overview = document.getElementById('familyOverview');
+  if (!useServer || profiles.length < 2) { overview.style.display = 'none'; return; }
+  try {
+    const res = await fetch('/api/status/today');
+    if (!res.ok) { overview.style.display = 'none'; return; }
+    const statusData = await res.json();
+    overview.style.display = 'block';
+    container.innerHTML = statusData.map((p, i) => {
+      const pct = p.total > 0 ? Math.round((p.taken / p.total) * 100) : -1;
+      const pctClass = pct < 0 ? 'neutral' : pct >= 80 ? 'good' : 'warn';
+      const pctText = pct < 0 ? '—' : pct + '%';
+      const isCurrent = p.id === currentProfileId;
+      const color = AVATAR_COLORS[i % AVATAR_COLORS.length];
+      const initial = p.name.charAt(0).toUpperCase();
+      const slotChips = ['morning','afternoon','night'].map(slot => {
+        const s = p.slots[slot];
+        if (s.total === 0) return `<span class="fm-slot-chip empty">${SLOT_ICONS[slot]}</span>`;
+        const cls = s.taken === s.total ? 'done' : s.taken > 0 ? 'partial' : 'pending';
+        return `<span class="fm-slot-chip ${cls}">${SLOT_ICONS[slot]} ${s.taken}/${s.total}</span>`;
+      }).join('');
+      return `<div class="family-member ${isCurrent ? 'current' : ''}" onclick="switchProfile('${p.id}')">
+        <div class="fm-avatar" style="background:${color}">${initial}</div>
+        <div class="fm-info">
+          <div class="fm-name">${p.name}${isCurrent ? ' ✦' : ''}</div>
+          <div class="fm-slots">${slotChips}</div>
+        </div>
+        <div class="fm-pct ${pctClass}">${pctText}</div>
+      </div>`;
+    }).join('');
+  } catch { overview.style.display = 'none'; }
+}
 
 // ---- Init ----
 (async function init() {

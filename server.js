@@ -98,6 +98,28 @@ app.post('/api/config/:profileId', (req, res) => {
   res.json({ message: 'Config saved', config: cfg });
 });
 
+// ---- GET /api/status/today — all profiles status for today ----
+app.get('/api/status/today', (req, res) => {
+  const db = loadDB();
+  const today = todayKey();
+  const result = [];
+  for (const [id, profile] of Object.entries(db.profiles)) {
+    const cfg = profile.config || { morning: [], afternoon: [], night: [] };
+    const dayData = (db.pills[id] && db.pills[id][today]) || {};
+    let taken = 0, total = 0;
+    const slots = {};
+    for (const slot of VALID_SLOTS) {
+      const meds = cfg[slot] || [];
+      const slotTaken = meds.filter(m => dayData[slot] && dayData[slot][m]).length;
+      slots[slot] = { taken: slotTaken, total: meds.length };
+      taken += slotTaken;
+      total += meds.length;
+    }
+    result.push({ id, name: profile.name, taken, total, slots });
+  }
+  res.json(result);
+});
+
 // ---- POST /api/pills/:profileId/toggleMed ----
 app.post('/api/pills/:profileId/toggleMed', (req, res) => {
   const { date, slot, med, taken } = req.body;
