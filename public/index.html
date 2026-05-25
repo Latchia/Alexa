@@ -837,11 +837,39 @@ const AVATAR_COLORS = ['#6c5ce7','#00b894','#e17055','#0984e3','#fdcb6e','#e8439
 async function renderFamilyOverview() {
   const container = document.getElementById('familyMembers');
   const overview = document.getElementById('familyOverview');
-  if (!useServer || profiles.length < 2) { overview.style.display = 'none'; return; }
+  if (profiles.length < 1) { overview.style.display = 'none'; return; }
   try {
-    const res = await fetch('/api/status/today');
-    if (!res.ok) { overview.style.display = 'none'; return; }
-    const statusData = await res.json();
+    let statusData = null;
+    if (useServer) {
+      try {
+        const res = await fetch('/api/status/today');
+        if (res.ok) statusData = await res.json();
+      } catch {}
+    }
+
+    // If server not available, build status from localStorage
+    if (!statusData) {
+      const localProfiles = loadProfilesList();
+      statusData = localProfiles.map(p => {
+        const id = p.id;
+        const cfgRaw = localStorage.getItem(`pt_${id}_config`);
+        const pillsRaw = localStorage.getItem(`pt_${id}_pills`);
+        const cfg = cfgRaw ? JSON.parse(cfgRaw) : { morning: [], afternoon: [], night: [] };
+        const pills = pillsRaw ? JSON.parse(pillsRaw) : {};
+        const today = dateKey(new Date());
+        let taken = 0, total = 0;
+        const slotsObj = {};
+        for (const slot of SLOTS) {
+          const meds = cfg[slot] || [];
+          const slotData = (pills[today] && pills[today][slot]) || {};
+          const slotTaken = meds.filter(m => slotData[m]).length;
+          slotsObj[slot] = { taken: slotTaken, total: meds.length };
+          taken += slotTaken; total += meds.length;
+        }
+        return { id, name: p.name, taken, total, slots: slotsObj };
+      });
+    }
+
     overview.style.display = 'block';
     container.innerHTML = statusData.map((p, i) => {
       const pct = p.total > 0 ? Math.round((p.taken / p.total) * 100) : -1;
@@ -851,7 +879,7 @@ async function renderFamilyOverview() {
       const color = AVATAR_COLORS[i % AVATAR_COLORS.length];
       const initial = p.name.charAt(0).toUpperCase();
       const slotChips = ['morning','afternoon','night'].map(slot => {
-        const s = p.slots[slot];
+        const s = p.slots[slot] || { taken: 0, total: 0 };
         if (s.total === 0) return `<span class="fm-slot-chip empty">${SLOT_ICONS[slot]}</span>`;
         const cls = s.taken === s.total ? 'done' : s.taken > 0 ? 'partial' : 'pending';
         return `<span class="fm-slot-chip ${cls}">${SLOT_ICONS[slot]} ${s.taken}/${s.total}</span>`;
@@ -865,7 +893,7 @@ async function renderFamilyOverview() {
         <div class="fm-pct ${pctClass}">${pctText}</div>
       </div>`;
     }).join('');
-  } catch { overview.style.display = 'none'; }
+  } catch (e) { overview.style.display = 'none'; }
 }
 
 // ---- Init ----
