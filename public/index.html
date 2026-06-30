@@ -419,6 +419,28 @@ async function fetchProfiles() {
     }
   }
 
+  // If connected to server, try to sync any local-only profiles so other devices see them
+  if (useServer) {
+    try {
+      const localProfiles = loadProfilesList();
+      for (const lp of localProfiles) {
+        // skip if server already has this id or name
+        if (profiles.find(p => p.id === lp.id || p.name === lp.name)) continue;
+        try {
+          const r = await fetch('/api/profiles', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: lp.name })
+          });
+          if (r.ok) {
+            const np = await r.json();
+            profiles.push(np);
+          }
+        } catch {}
+      }
+      if (profiles.length > 0) saveProfilesList();
+    } catch {}
+  }
+
   // If server has no profiles but localStorage does, restore them
   if (useServer && profiles.length === 0) {
     const localProfiles = loadProfilesList();
