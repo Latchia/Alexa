@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+const bcrypt = require('bcryptjs');
 
 const app = express();
 const PORT = process.env.PORT || 3456;
@@ -22,6 +23,20 @@ function loadDB() {
 }
 function saveDB(db) {
   fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf8');
+  // Also write per-profile JSON files into ./data for local backups
+  try {
+    const dataDir = path.join(__dirname, 'data');
+    if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir);
+    for (const [id, profile] of Object.entries(db.profiles || {})) {
+      const out = {
+        profile: { id, name: profile.name, config: profile.config || {}, reminders: profile.reminders || {} },
+        pills: db.pills && db.pills[id] ? db.pills[id] : {}
+      };
+      fs.writeFileSync(path.join(dataDir, `${id}.json`), JSON.stringify(out, null, 2), 'utf8');
+    }
+  } catch (e) {
+    console.error('Failed to write per-profile data files', e);
+  }
 }
 
 function todayKey() { return new Date().toISOString().slice(0, 10); }
@@ -34,7 +49,7 @@ function sanitizeId(name) {
 // ---- GET /api/profiles ----
 app.get('/api/profiles', (req, res) => {
   const db = loadDB();
-  const list = Object.entries(db.profiles).map(([id, p]) => ({ id, name: p.name }));
+  const list = Object.entries(db.profiles).map(([id, p]) => ({ id, name: p.name, hasPassword: !!p.passwordHash }));
   res.json(list);
 });
 
@@ -62,12 +77,38 @@ app.post('/api/profiles', (req, res) => {
 // ---- DELETE /api/profiles/:id ----
 app.delete('/api/profiles/:id', (req, res) => {
   const { id } = req.params;
+  const { password } = req.body || {};
   const db = loadDB();
-  if (!db.profiles[id]) return res.status(404).json({ error: 'Profile not found' });
+  const profile = db.profiles[id];
+  if (!profile) return res.status(404).json({ error: 'Profile not found' });
+  if (profile.passwordHash) {
+    if (!password) return res.status(403).json({ error: 'Password required' });
+    if (!bcrypt.compareSync(password, profile.passwordHash)) return res.status(403).json({ error: 'Invalid password' });
+  }
   delete db.profiles[id];
   delete db.pills[id];
   saveDB(db);
   res.json({ message: 'Deleted', id });
+});
+
+// ---- POST /api/profiles/:id/password — set or clear delete password ----
+app.post('/api/profiles/:id/password', (req, res) => {
+  const { id } = req.params;
+  const { password } = req.body || {};
+  const db = loadDB();
+  const profile = db.profiles[id];
+  if (!profile) return res.status(404).json({ error: 'Profile not found' });
+  if (!password) {
+    // clear password
+    delete profile.passwordHash;
+    saveDB(db);
+    return res.json({ message: 'Password cleared' });
+  }
+  if (typeof password !== 'string' || password.length < 4) return res.status(400).json({ error: 'Password must be at least 4 characters' });
+  const hash = bcrypt.hashSync(password, 10);
+  profile.passwordHash = hash;
+  saveDB(db);
+  res.json({ message: 'Password set' });
 });
 
 // ---- GET /api/pills/:profileId ----
@@ -211,6 +252,98 @@ app.get('/tap/:profileId/auto', (req, res) => handleTap(req.params.profileId, au
 app.get('/tap/:profileId/morning', (req, res) => handleTap(req.params.profileId, 'morning', res));
 app.get('/tap/:profileId/afternoon', (req, res) => handleTap(req.params.profileId, 'afternoon', res));
 app.get('/tap/:profileId/night', (req, res) => handleTap(req.params.profileId, 'night', res));
+
+// ---- GET /api/export/:id — download per-profile JSON backup ----
+app.get('/api/export/:id', (req, res) => {
+  const id = req.params.id;
+  const db = loadDB();
+  const profile = db.profiles[id];
+  if (!profile) return res.status(404).json({ error: 'Profile not found' });
+  const out = {
+    profile: { id, name: profile.name, config: profile.config || {}, reminders: profile.reminders || {} },
+    pills: db.pills && db.pills[id] ? db.pills[id] : {}
+  };
+  const filename = `${id}.json`;
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.send(JSON.stringify(out, null, 2));
+});
+
+// ---- POST /api/import — import profile JSON (profile,pills) ----
+app.post('/api/import', (req, res) => {
+  const { profile, pills, overwrite } = req.body || {};
+  if (!profile || !profile.id || !profile.name) return res.status(400).json({ error: 'Invalid import payload' });
+  const id = profile.id;
+  const db = loadDB();
+  if (db.profiles[id] && !overwrite) return res.status(409).json({ error: 'Profile exists; set overwrite to true to replace' });
+  db.profiles[id] = db.profiles[id] || {};
+  db.profiles[id].name = profile.name;
+  db.profiles[id].config = profile.config || { morning: [], afternoon: [], night: [] };
+  if (profile.reminders) db.profiles[id].reminders = profile.reminders;
+  if (profile.passwordHash) db.profiles[id].passwordHash = profile.passwordHash;
+  db.pills[id] = pills || {};
+  saveDB(db);
+  res.json({ message: 'Imported', id });
+});
+
+// ---- Scheduled backups: write full DB to data/backups every hour ----
+function ensureDir(p) { try { if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true }); } catch (e) {} }
+const BACKUP_INTERVAL_MS = 1000 * 60 * 60; // 1 hour
+function writeBackup() {
+  try {
+    const db = loadDB();
+    const backupsDir = path.join(__dirname, 'data', 'backups');
+    ensureDir(backupsDir);
+    const fname = `backup-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+    fs.writeFileSync(path.join(backupsDir, fname), JSON.stringify(db, null, 2), 'utf8');
+    console.log('Backup written', fname);
+  } catch (e) { console.error('Backup failed', e); }
+}
+// initial backup at startup
+writeBackup();
+setInterval(writeBackup, BACKUP_INTERVAL_MS);
+
+// ---- Backups listing, download, and restore endpoints ----
+app.get('/api/backups', (req, res) => {
+  try {
+    const backupsDir = path.join(__dirname, 'data', 'backups');
+    ensureDir(backupsDir);
+    const files = fs.readdirSync(backupsDir).filter(f => f.endsWith('.json'))
+      .map(fname => {
+        const full = path.join(backupsDir, fname);
+        const s = fs.statSync(full);
+        return { name: fname, mtime: s.mtimeMs, size: s.size };
+      })
+      .sort((a, b) => b.mtime - a.mtime);
+    res.json(files);
+  } catch (e) { res.status(500).json({ error: 'Failed to list backups' }); }
+});
+
+app.get('/api/backups/:name', (req, res) => {
+  const name = path.basename(req.params.name);
+  const full = path.join(__dirname, 'data', 'backups', name);
+  if (!fs.existsSync(full)) return res.status(404).json({ error: 'Not found' });
+  res.download(full);
+});
+
+app.post('/api/restore', (req, res) => {
+  const { filename } = req.body || {};
+  if (!filename) return res.status(400).json({ error: 'filename is required' });
+  const name = path.basename(filename);
+  const full = path.join(__dirname, 'data', 'backups', name);
+  if (!fs.existsSync(full)) return res.status(404).json({ error: 'Backup not found' });
+  try {
+    const content = JSON.parse(fs.readFileSync(full, 'utf8'));
+    // overwrite db.json with the backup content
+    fs.writeFileSync(DB_FILE, JSON.stringify(content, null, 2), 'utf8');
+    // ensure per-profile files and other derived files are written
+    saveDB(content);
+    res.json({ message: 'Restored', filename: name });
+  } catch (e) {
+    console.error('Restore failed', e);
+    res.status(500).json({ error: 'Restore failed' });
+  }
+});
 
 app.listen(PORT, () => {
   console.log(`Mr.Pill-Tracker™ running at http://localhost:${PORT}`);

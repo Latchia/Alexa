@@ -1,0 +1,42 @@
+{
+  "profile": {
+    "id": "shanmathi",
+    "name": "Shanmathi",
+    "config": {
+      "morning": [
+        "Vitamin D",
+        "Iron"
+      ],
+      "afternoon": [
+        "Calcium"
+      ],
+      "night": [
+        "Melatonin"
+      ]
+    },
+    "reminders": {
+      "morning": "08:00",
+      "afternoon": "13:00",
+      "night": "21:00"
+    }
+  },
+  "pills": {
+    "2026-05-19": {
+      "night": {
+        "Melatonin": true
+      }
+    },
+    "2026-05-20": {
+      "morning": {
+        "Vitamin D": true,
+        "Iron": true
+      },
+      "afternoon": {
+        "Calcium": true
+      },
+      "night": {
+        "Melatonin": true
+      }
+    }
+  }
+}

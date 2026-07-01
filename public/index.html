@@ -284,10 +284,14 @@
   <div class="profile-bar" id="profileBar">
     <select id="profileSelect" onchange="switchProfile(this.value)"></select>
     <button class="pbtn" onclick="openCreateModal()">+ New</button>
+    <button class="pbtn" onclick="exportProfile()">⤓ Export</button>
+    <button class="pbtn" onclick="document.getElementById('importFile').click()">⤒ Import</button>
     <button class="pbtn danger" id="deleteBtn" onclick="deleteProfile()">🗑</button>
   </div>
   <span id="modeTag">💾 Local</span>
 </header>
+
+<input type="file" id="importFile" accept="application/json" style="display:none" onchange="handleImportFile(event)">
 
 <!-- Create Profile Modal -->
 <div class="modal-overlay" id="createModal">
@@ -609,7 +613,24 @@ async function deleteProfile() {
   if (!confirm(`Delete profile "${name}" and all their data?`)) return;
 
   if (useServer) {
-    try { await fetch(`/api/profiles/${currentProfileId}`, { method: 'DELETE' }); } catch {}
+    try {
+      const opts = {};
+      if (profile && profile.hasPassword) {
+        const pw = prompt(`Enter delete password for ${name}`);
+        if (pw === null) return; // cancelled
+        opts.method = 'DELETE';
+        opts.headers = { 'Content-Type': 'application/json' };
+        opts.body = JSON.stringify({ password: pw });
+      } else {
+        opts.method = 'DELETE';
+      }
+      const res = await fetch(`/api/profiles/${currentProfileId}`, opts);
+      if (!res.ok) {
+        const j = await res.json().catch(()=>({}));
+        showToast(j.error || 'Delete failed');
+        return;
+      }
+    } catch (e) { showToast('Delete failed'); return; }
   }
   try { localStorage.removeItem(lsKey('pills')); localStorage.removeItem(lsKey('config')); } catch {}
   profiles = profiles.filter(p => p.id !== currentProfileId);
@@ -618,6 +639,103 @@ async function deleteProfile() {
   renderProfileDropdown();
   if (profiles.length > 0) switchProfile(profiles[0].id);
   showToast(`Deleted "${name}"`);
+}
+
+// ---- Export / Import ----
+function download(filename, text) {
+  const a = document.createElement('a');
+  const blob = new Blob([text], { type: 'application/json' });
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+function exportProfile() {
+  if (!currentProfileId) { showToast('No profile selected'); return; }
+  const id = currentProfileId;
+  if (useServer) {
+    // navigate to server export endpoint
+    window.location = `/api/export/${id}`;
+    return;
+  }
+  // Offline: build JSON from localStorage
+  const cfgRaw = localStorage.getItem(`pt_${id}_config`);
+  const pillsRaw = localStorage.getItem(`pt_${id}_pills`);
+  const profile = profiles.find(p => p.id === id) || { id, name: id };
+  const out = {
+    profile: { id, name: profile.name, config: cfgRaw ? JSON.parse(cfgRaw) : { morning: [], afternoon: [], night: [] } },
+    pills: pillsRaw ? JSON.parse(pillsRaw) : {}
+  };
+  download(`${id}.json`, JSON.stringify(out, null, 2));
+}
+
+function handleImportFile(e) {
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = async function() {
+    try {
+      const data = JSON.parse(reader.result);
+      await importProfileData(data);
+      showToast('Import complete');
+      // refresh UI
+      await fetchProfiles();
+      if (data.profile && data.profile.id) switchProfile(data.profile.id);
+    } catch (err) {
+      showToast('Import failed');
+      console.error(err);
+    }
+  };
+  reader.readAsText(f);
+  e.target.value = '';
+}
+
+async function importProfileData(data) {
+  if (!data || !data.profile || !data.profile.id) throw new Error('Invalid profile file');
+  const id = data.profile.id;
+  const name = data.profile.name || id;
+  // If server available, POST to server import endpoint
+  if (useServer) {
+    const ok = confirm(`Import profile ${name} to server? This may overwrite an existing profile.`);
+    if (!ok) return;
+    const res = await fetch('/api/import', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profile: data.profile, pills: data.pills, overwrite: true })
+    });
+    if (!res.ok) {
+      const j = await res.json().catch(()=>({}));
+      throw new Error(j.error || 'Import failed');
+    }
+    return;
+  }
+  // Offline: save to localStorage and profiles list
+  const profilesList = loadProfilesList();
+  if (!profilesList.find(p=>p.id===id)) profilesList.push({ id, name });
+  localStorage.setItem('pt_profiles', JSON.stringify(profilesList));
+  if (data.profile.config) localStorage.setItem(`pt_${id}_config`, JSON.stringify(data.profile.config));
+  if (data.pills) localStorage.setItem(`pt_${id}_pills`, JSON.stringify(data.pills));
+}
+
+async function setProfilePassword() {
+  if (!currentProfileId) return;
+  const pw = document.getElementById('pw-input').value;
+  if (!confirm(pw ? 'Set password for this profile?' : 'Clear password for this profile?')) return;
+  try {
+    const res = await fetch(`/api/profiles/${currentProfileId}/password`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw })
+    });
+    if (res.ok) {
+      showToast(pw ? 'Password set' : 'Password cleared');
+      // refresh profiles list to update hasPassword flags
+      try { const r = await fetch('/api/profiles'); if (r.ok) profiles = await r.json(); saveProfilesList(); renderProfileDropdown(); renderFamilyOverview(); } catch {}
+    } else {
+      const j = await res.json().catch(()=>({}));
+      showToast(j.error || 'Failed to set password');
+    }
+  } catch (e) { showToast('Failed to set password'); }
 }
 
 // ---- Data ----
@@ -762,6 +880,21 @@ function renderSettings() {
       </div>
     </div>
   `).join('') + '<div style="text-align:center;font-size:0.72rem;color:#00b894;padding:6px 0">Changes are saved automatically</div>';
+  
+  // Password management for this profile
+  const profile = profiles.find(p => p.id === currentProfileId) || {};
+  const hasPw = profile.hasPassword ? 'Yes' : 'No';
+  const pwHtml = `
+    <div class="config-slot">
+      <h4>🔒 Delete Password</h4>
+      <div style="margin-bottom:8px;font-size:0.82rem;color:#666">Protected: ${hasPw}</div>
+      <div class="med-input-row">
+        <input type="text" id="pw-input" placeholder="Enter new delete password (leave empty to clear)">
+        <button class="btn-add" onclick="setProfilePassword()">Save</button>
+      </div>
+      <div style="margin-top:8px;font-size:0.72rem;color:#999">When set, this password is required to delete this profile.</div>
+    </div>`;
+  body.innerHTML += pwHtml;
 }
 
 function addMed(slot) {
